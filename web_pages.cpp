@@ -108,31 +108,35 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 
 <div class="card" style="margin-top:12px">
   <h3>Frequenz</h3>
-  <div class="row">
-    <div style="flex:2">
-      <input id="freq" inputmode="numeric" value="14074000">
+
+  <div style="display:flex; gap:10px; align-items:center; justify-content:space-between">
+    <div id="freqDisplay" style="font-size:28px; font-weight:700; letter-spacing:1px; flex:1; font-family:ui-monospace,monospace">
+      14 074 000 Hz
     </div>
-    <div style="flex:1">
-      <button class="btn primary" onclick="setFreq()">Set</button>
+
+    <div style="display:flex; gap:8px">
+      <button class="btn" style="min-width:54px" onclick="freqMinus()">−</button>
+      <button class="btn primary" style="min-width:54px" onclick="freqPlus()">+</button>
     </div>
   </div>
 
-  <div style="margin-top:10px" class="grid">
-    <button class="btn" onclick="nudge(-1000000)">-1M</button>
-    <button class="btn" onclick="nudge(-100000)">-100k</button>
-    <button class="btn" onclick="nudge(-10000)">-10k</button>
-    <button class="btn" onclick="nudge(-1000)">-1k</button>
-    <button class="btn" onclick="nudge(-100)">-100</button>
-    <button class="btn" onclick="nudge(-10)">-10</button>
+  <div class="muted" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; gap:10px">
+    <div style="display:flex; align-items:center; gap:10px">
+      <span>Step:</span>
+      <span id="stepLabel" style="font-weight:700">1 000 Hz</span>
+    </div>
 
-    <button class="btn" onclick="nudge(10)">+10</button>
-    <button class="btn" onclick="nudge(100)">+100</button>
-    <button class="btn" onclick="nudge(1000)">+1k</button>
-    <button class="btn" onclick="nudge(10000)">+10k</button>
-    <button class="btn" onclick="nudge(100000)">+100k</button>
-    <button class="btn" onclick="nudge(1000000)">+1M</button>
+    <div style="display:flex; gap:8px">
+      <button class="btn" style="min-width:54px" onclick="stepLeft()">◀</button>
+      <button class="btn" style="min-width:54px" onclick="stepRight()">▶</button>
+    </div>
+  </div>
+
+  <div class="muted" style="margin-top:8px">
+    Bereich: 1 500 Hz – 30 000 000 Hz
   </div>
 </div>
+
 
 <div class="card" style="margin-top:12px">
   <h3>Log</h3>
@@ -146,6 +150,15 @@ function logLine(s){
   el.textContent += s + "\n"; // "\\n"
   el.scrollTop = el.scrollHeight;
 }
+
+window.addEventListener('error', (e) => {
+  logLine("JS ERROR: " + (e.message || e));
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  logLine("PROMISE ERROR: " + (e.reason?.message || e.reason || e));
+});
+
 
 function setConn(connected){
   document.getElementById('led').style.background = connected ? '#0a0' : '#c00';
@@ -179,7 +192,10 @@ async function refreshState(){
     const st = await r.json();
 
     setConn(!!st.radio_connected);
-    document.getElementById('freq').value = st.freq_hz;
+
+    currentFreqHz = parseInt(st.freq_hz, 10) || currentFreqHz;
+    updateFreqUI();
+
 
     ['LSB','USB','CW'].forEach(x=>{
       document.getElementById('m'+x).classList.toggle('active', st.mode===x);
@@ -216,19 +232,86 @@ async function sendCmd(cmd, payload={}){
 function setPreset(p){
   sendCmd('preset', {value:p});
 }
+
 function setMode(m){
   sendCmd('mode', {value:m});
 }
-function setFreq(){
-  const hz = parseInt(document.getElementById('freq').value,10)||0;
-  sendCmd('freq', {hz});
+
+
+// ------- Frequency "front panel" control -------
+const FREQ_MIN = 1500;
+const FREQ_MAX = 30000000;
+
+let currentFreqHz = 14074000;
+
+// 1 Hz .. 10 MHz
+const STEPS = [1,10,100,1000,10000,100000,1000000,10000000];
+let stepIndex = 3; // 1 kHz
+
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function fmtHz(n){
+  const s = String(Math.trunc(n));
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " Hz";
 }
-function nudge(delta){
-  const f = parseInt(document.getElementById('freq').value,10)||0;
-  const nf = Math.max(0, f + delta);
-  document.getElementById('freq').value = nf;
-  sendCmd('freq', {hz:nf});
+
+// genau EINE Stelle unterstreichen (aktive Digit-Position)
+function fmtHzWithUnderline(freq, step){
+  const raw = String(Math.trunc(freq)).padStart(8, '0'); // bis 30 MHz: 8 Stellen
+  const len = raw.length;
+
+  const posFromRight = Math.log10(step) | 0;      // 1->0, 10->1, ...
+  const activeIndex  = len - 1 - posFromRight;    // Index im String
+
+  let out = "";
+  for(let i=0;i<len;i++){
+    const ch = raw[i];
+    out += (i === activeIndex) ? `<u>${ch}</u>` : ch;
+
+    const fromRight = len - i - 1;
+    if(fromRight % 3 === 0 && i !== len - 1) out += " ";
+  }
+  return out + " Hz";
 }
+
+function updateFreqUI(){
+  const fd = document.getElementById('freqDisplay');
+  if(fd) fd.innerHTML = fmtHzWithUnderline(currentFreqHz, STEPS[stepIndex]);
+
+  const sl = document.getElementById('stepLabel');
+  if(sl) sl.textContent = fmtHz(STEPS[stepIndex]);
+}
+
+async function pushFreq(){
+  currentFreqHz = clamp(currentFreqHz, FREQ_MIN, FREQ_MAX);
+  updateFreqUI();
+  // logLine(JSON.stringify({cmd:"freq", hz: currentFreqHz}));   // <— HARTE Debug-Zeile
+  await sendCmd('freq', { hz: currentFreqHz });
+}
+
+async function freqPlus(){
+  currentFreqHz = clamp(currentFreqHz + STEPS[stepIndex], FREQ_MIN, FREQ_MAX);
+  await pushFreq();
+}
+
+async function freqMinus(){
+  currentFreqHz = clamp(currentFreqHz - STEPS[stepIndex], FREQ_MIN, FREQ_MAX);
+  await pushFreq();
+}
+
+function stepLeft(){
+  // gröber
+  stepIndex = clamp(stepIndex + 1, 0, STEPS.length - 1);
+  updateFreqUI();
+}
+
+function stepRight(){
+  // feiner
+  stepIndex = clamp(stepIndex - 1, 0, STEPS.length - 1);
+  updateFreqUI();
+}
+
+
 
 function applyDark(isDark){
   document.body.classList.toggle('dark', isDark);
@@ -249,6 +332,7 @@ function toggleDark(){
   applyDark(isDark);
 })();
 
+updateFreqUI();
 refreshState();
 setInterval(refreshState, 1500);
 </script>
