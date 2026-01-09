@@ -70,18 +70,16 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
     </div>
   </div>
 
-<div>
-  <button id="connBtn" class="btn primary" onclick="toggleConnect()">Connect</button>
-</div>
-
-
+  <div>
+    <button id="connBtn" class="btn primary" onclick="toggleConnect()">Connect</button>
+  </div>
 </div>
 
 <div class="muted" id="netInfo"></div>
 
 <div class="row" style="margin-top:12px">
   <div class="card">
-    <h3>Presets</h3>
+    <h5>Presets</h5>
     <div class="seg" style="gap:0">
       <button id="pPlatin" class="active" onclick="setPreset('Plain')">Plain</button>
       <button id="p1" onclick="setPreset('1')">1</button>
@@ -97,7 +95,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
   </div>
 
   <div class="card">
-    <h3>Betriebsart</h3>
+    <h5>Betriebsart</h5>
     <div class="seg">
       <button id="mLSB" onclick="setMode('LSB')">LSB</button>
       <button id="mUSB" class="active" onclick="setMode('USB')">USB</button>
@@ -107,17 +105,16 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 </div>
 
 <div class="card" style="margin-top:12px">
-  <h3>Frequenz</h3>
-
+  
  <div
   id="freqDisplay"
   style="
-    font-size:40px;
+    font-size:38px;
     font-weight:800;
     letter-spacing:2px;
     text-align:center;
     user-select:none;
-    padding:8px 0;
+    padding:5px 0;
     font-family:ui-monospace,monospace;
   ">
   14 074 000 Hz
@@ -127,7 +124,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 
 
 <div class="card" style="margin-top:12px">
-  <h3>Log</h3>
+  <h5>Log</h5>
   <div id="log" class="log"></div>
 </div>
 
@@ -148,6 +145,15 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
     const t = e.touches[0];
     sx = t.clientX; sy = t.clientY;
   }, {passive:true});
+
+  el.addEventListener('touchend', async ()=>{
+    await flushFreq();
+  }, {passive:true});
+
+  el.addEventListener('touchcancel', async ()=>{
+    await flushFreq();
+  }, {passive:true});
+
 
   el.addEventListener('touchmove', async (e)=>{
     const t = e.touches[0];
@@ -221,9 +227,11 @@ async function refreshState(){
 
     setConn(!!st.radio_connected);
 
-    currentFreqHz = parseInt(st.freq_hz, 10) || currentFreqHz;
-    updateFreqUI();
-
+    if(pendingFreqHz === null) {
+      currentFreqHz = parseInt(st.freq_hz, 10) || currentFreqHz;
+      updateFreqUI();
+      lastSentFreqHz = currentFreqHz; // optional, verhindert direktes Resend
+    }
 
     ['LSB','USB','CW'].forEach(x=>{
       document.getElementById('m'+x).classList.toggle('active', st.mode===x);
@@ -272,6 +280,11 @@ const FREQ_MAX = 30000000;
 
 let currentFreqHz = 14074000;
 
+const FREQ_DEBOUNCE_MS = 500;
+
+let freqSendTimer = null;
+let pendingFreqHz = null;
+let lastSentFreqHz = null;
 
 
 // 1 Hz .. 10 MHz
@@ -312,16 +325,62 @@ function updateFreqUI(){
   if(sl) sl.textContent = fmtHz(STEPS[stepIndex]);
 }
 
-async function pushFreq(){
+function scheduleFreqSend(){
+  // Timer neu starten
+  if(freqSendTimer) clearTimeout(freqSendTimer);
+
+  pendingFreqHz = currentFreqHz;
+
+  freqSendTimer = setTimeout(async () => {
+    freqSendTimer = null;
+
+    // nichts zu tun?
+    if(pendingFreqHz === null) return;
+
+    // nicht doppelt senden
+    if(lastSentFreqHz === pendingFreqHz) return;
+
+    const toSend = pendingFreqHz;
+    pendingFreqHz = null;
+
+    // Send (robust)
+    await sendCmd('freq', { hz: toSend });
+    lastSentFreqHz = toSend;
+  }, FREQ_DEBOUNCE_MS);
+}
+
+async function flushFreq(){
+  if(freqSendTimer){
+    clearTimeout(freqSendTimer);
+    freqSendTimer = null;
+  }
+  if(pendingFreqHz === null) return;
+  if(lastSentFreqHz === pendingFreqHz) { pendingFreqHz = null; return; }
+
+  const toSend = pendingFreqHz;
+  pendingFreqHz = null;
+
+  await sendCmd('freq', { hz: toSend });
+  lastSentFreqHz = toSend;
+}
+
+
+function pushFreq(){
+  currentFreqHz = clamp(currentFreqHz, FREQ_MIN, FREQ_MAX);
+  updateFreqUI();
+  scheduleFreqSend();
+}
+
+function pushFreq__(){
   currentFreqHz = clamp(currentFreqHz, FREQ_MIN, FREQ_MAX);
   updateFreqUI();
   // logLine(JSON.stringify({cmd:"freq", hz: currentFreqHz}));   // <— HARTE Debug-Zeile
-  await sendCmd('freq', { hz: currentFreqHz });
+  sendCmd('freq', { hz: currentFreqHz });
 }
 
-async function freqPlus(){
+function freqPlus(){
   currentFreqHz = clamp(currentFreqHz + STEPS[stepIndex], FREQ_MIN, FREQ_MAX);
-  await pushFreq();
+  pushFreq();
 }
 
 async function freqMinus(){
