@@ -109,32 +109,20 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 <div class="card" style="margin-top:12px">
   <h3>Frequenz</h3>
 
-  <div style="display:flex; gap:10px; align-items:center; justify-content:space-between">
-    <div id="freqDisplay" style="font-size:28px; font-weight:700; letter-spacing:1px; flex:1; font-family:ui-monospace,monospace">
-      14 074 000 Hz
-    </div>
-
-    <div style="display:flex; gap:8px">
-      <button class="btn" style="min-width:54px" onclick="freqMinus()">−</button>
-      <button class="btn primary" style="min-width:54px" onclick="freqPlus()">+</button>
-    </div>
-  </div>
-
-  <div class="muted" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; gap:10px">
-    <div style="display:flex; align-items:center; gap:10px">
-      <span>Step:</span>
-      <span id="stepLabel" style="font-weight:700">1 000 Hz</span>
-    </div>
-
-    <div style="display:flex; gap:8px">
-      <button class="btn" style="min-width:54px" onclick="stepLeft()">◀</button>
-      <button class="btn" style="min-width:54px" onclick="stepRight()">▶</button>
-    </div>
-  </div>
-
-  <div class="muted" style="margin-top:8px">
-    Bereich: 1 500 Hz – 30 000 000 Hz
-  </div>
+ <div
+  id="freqDisplay"
+  style="
+    font-size:40px;
+    font-weight:800;
+    letter-spacing:2px;
+    text-align:center;
+    user-select:none;
+    padding:8px 0;
+    font-family:ui-monospace,monospace;
+  ">
+  14 074 000 Hz
+</div>
+  
 </div>
 
 
@@ -144,6 +132,46 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 </div>
 
 <script>
+
+(function enableWheelSwipe(){
+  const el = document.getElementById('freqDisplay');
+  if(!el) return;
+
+  let sx=0, sy=0;
+  let lastAction = 0;
+  const TH = 25;      // Pixel-Schwelle
+  const RATE = 80;    // ms zwischen Aktionen
+
+  el.style.touchAction = "none"; // wichtig, damit der Browser nicht scrollt/zoomt
+
+  el.addEventListener('touchstart', (e)=>{
+    const t = e.touches[0];
+    sx = t.clientX; sy = t.clientY;
+  }, {passive:true});
+
+  el.addEventListener('touchmove', async (e)=>{
+    const t = e.touches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+
+    const now = Date.now();
+    if(now - lastAction < RATE) return;
+
+    if(Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > TH){
+      lastAction = now;
+      sy = t.clientY; // reset, damit man weiterwischen kann
+      if(dy < 0) await freqPlus(); else await freqMinus();
+    }
+    else if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > TH){
+      lastAction = now;
+      sx = t.clientX;
+      if(dx > 0) stepRight(); else stepLeft();
+    }
+  }, {passive:true});
+})();
+
+
+//------------------------------------------------------------
 
 function logLine(s){
   const el=document.getElementById('log');
@@ -243,6 +271,8 @@ const FREQ_MIN = 1500;
 const FREQ_MAX = 30000000;
 
 let currentFreqHz = 14074000;
+
+
 
 // 1 Hz .. 10 MHz
 const STEPS = [1,10,100,1000,10000,100000,1000000,10000000];
