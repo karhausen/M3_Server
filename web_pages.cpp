@@ -70,10 +70,11 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
     </div>
   </div>
 
-  <div>
-    <button class="btn primary" onclick="sendCmd('connect')">Connect</button>
-    <button class="btn" onclick="sendCmd('disconnect')">Disconnect</button>
-  </div>
+<div>
+  <button id="connBtn" class="btn primary" onclick="toggleConnect()">Connect</button>
+</div>
+
+
 </div>
 
 <div class="muted" id="netInfo"></div>
@@ -139,20 +140,34 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 </div>
 
 <script>
+
 function logLine(s){
   const el=document.getElementById('log');
-  el.textContent += s + "\\n";
+  el.textContent += s + "\n"; // "\\n"
   el.scrollTop = el.scrollHeight;
 }
+
 function setConn(connected){
   document.getElementById('led').style.background = connected ? '#0a0' : '#c00';
   document.getElementById('connText').textContent = connected ? 'Connected' : 'Disconnected';
+
+  const b = document.getElementById('connBtn');
+  if(b){
+    b.textContent = connected ? "Disconnect" : "Connect";
+    b.classList.toggle('primary', !connected); // primary nur bei "Connect"
+  }
 }
 
+async function toggleConnect(){
+  const isConnected = document.getElementById('connText').textContent === 'Connected';
+  await sendCmd(isConnected ? 'disconnect' : 'connect');
+}
+
+
 function markPreset(p){
-  const ids = ["Platin","1","2","3","4","5","6","7","8","9"];
+  const ids = ["Plain","1","2","3","4","5","6","7","8","9"];
   ids.forEach(x=>{
-    const id = (x==="Platin") ? "pPlatin" : ("p"+x);
+    const id = (x==="Plain") ? "pPlain" : ("p"+x);
     const el = document.getElementById(id);
     if(el) el.classList.toggle('active', x===p);
   });
@@ -180,12 +195,22 @@ async function refreshState(){
 }
 
 async function sendCmd(cmd, payload={}){
+  const btn = document.getElementById('connBtn');
+  if(btn) btn.disabled = true;
+
   const body = JSON.stringify({cmd, ...payload});
-  logLine("> " + body);
-  const r = await fetch('/api/cmd', {method:'POST', headers:{'Content-Type':'application/json'}, body});
-  const t = await r.text();
-  logLine("< " + t);
-  await refreshState();
+  logLine("" + body);
+
+  try{
+    const r = await fetch('/api/cmd', {method:'POST', headers:{'Content-Type':'application/json'}, body});
+    const t = await r.text();
+    logLine("" + t);
+  } catch(e){
+    logLine("ERROR: no response");
+  } finally {
+    await refreshState();
+    if(btn) btn.disabled = false;
+  }
 }
 
 function setPreset(p){
