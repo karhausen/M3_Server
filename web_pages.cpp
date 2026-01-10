@@ -72,6 +72,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
 
   <div>
     <button id="connBtn" class="btn primary" onclick="toggleConnect()">Connect</button>
+    <button class="btn" onclick="location.href='/setup'">Setup</button>
   </div>
 </div>
 

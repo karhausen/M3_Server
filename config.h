@@ -2,8 +2,8 @@
 #include <Arduino.h>
 
 // WLAN STA
-static const char* STA_SSID = "DEIN_WLAN";
-static const char* STA_PASS = "DEIN_PASSWORT";
+// static const char* STA_SSID = "my_ssid";
+// static const char* STA_PASS = "my_pwd";
 
 // Fallback AP
 static const char* AP_SSID  = "RadioRemote-ESP32";

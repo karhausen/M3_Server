@@ -1,8 +1,10 @@
 #include "web_ui.h"
 #include "app_state.h"
 #include "wifi_manager.h"
+#include "wifi_config.h"
 #include "radio_link.h"
 #include "web_pages.h"
+#include "setup_page.h"
 
 static String readBody(WebServer& server) {
   if (server.hasArg("plain")) return server.arg("plain");
@@ -33,6 +35,33 @@ static long extractJsonNumber(const String& body, const char* key) {
 
 static void handleRoot(WebServer& server) {
   server.send(200, "text/html; charset=utf-8", INDEX_HTML);
+}
+
+static void handleSetup(WebServer& server){
+  server.send(200, "text/html; charset=utf-8", SETUP_HTML);
+}
+
+static void handleWifiSave(WebServer& server){
+  String body = readBody(server);
+  Serial.println("[API WIFI] " + body);
+
+  String ssid = extractJsonString(body, "ssid");
+  String pass = extractJsonString(body, "pass");
+
+  // Minimal-Check: SSID muss gesetzt sein
+  if (ssid.length() == 0) {
+    server.send(400, "text/plain", "SSID fehlt.");
+    return;
+  }
+
+  bool ok = wifi_cfg_save(ssid, pass);
+  server.send(ok ? 200 : 500, "text/plain", ok ? "Gespeichert. Reboot drücken, um zu verbinden." : "Speichern fehlgeschlagen.");
+}
+
+static void handleReboot(WebServer& server){
+  server.send(200, "text/plain", "OK");
+  delay(200);
+  ESP.restart();
 }
 
 static void handleCmd(WebServer& server) {
@@ -90,6 +119,9 @@ void webui_setup(WebServer& server) {
   server.on("/", HTTP_GET, [&server]() { handleRoot(server); });
   server.on("/api/cmd", HTTP_POST, [&server]() { handleCmd(server); });
   server.on("/api/state", HTTP_GET, [&server]() { handleState(server); });
+  server.on("/setup", HTTP_GET, [&server]() { handleSetup(server); });
+  server.on("/api/wifi", HTTP_POST, [&server]() { handleWifiSave(server); });
+  server.on("/api/reboot", HTTP_POST, [&server]() { handleReboot(server); });
 
   server.begin();
   Serial.println("HTTP server started.");

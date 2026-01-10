@@ -1,15 +1,22 @@
 #include "wifi_manager.h"
 #include "config.h"
+#include "wifi_config.h"
 
 static bool staConnected = false;
 static bool apStarted = false;
 
 static bool connectSTA_withTimeout(uint32_t timeoutMs) {
+  StaCredentials cred = wifi_cfg_load();
+  if (!cred.valid()) {
+    Serial.println("STA: no saved credentials.");
+    return false;
+  }
+
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
-  WiFi.begin(STA_SSID, STA_PASS);
+  WiFi.begin(cred.ssid.c_str(), cred.pass.c_str());
 
-  Serial.printf("STA: connecting to '%s' ...\n", STA_SSID);
+  Serial.printf("STA: connecting to '%s' ...\n", cred.ssid.c_str());
 
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - t0) < timeoutMs) {
