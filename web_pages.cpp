@@ -47,13 +47,20 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
   .btn{padding:10px 12px;border-radius:10px;border:1px solid var(--btnBorder);background:var(--btn);cursor:pointer;color:var(--fg)}
   .btn.primary{background:var(--btnPrimary);border-color:var(--btnPrimaryBorder)}
   .btn:active{transform:scale(0.98)}
+  
   input{padding:10px;border-radius:10px;border:1px solid var(--btnBorder);width:100%;background:var(--card);color:var(--fg)}
+  
   .seg{display:flex;border:1px solid var(--btnBorder);border-radius:10px;overflow:hidden;flex-wrap:wrap}
+  
   .seg button{flex:1;border:0;padding:10px;cursor:pointer;background:var(--btn);min-width:60px;color:var(--fg)}
+  
   .seg button.active{background:var(--btnPrimary)}
+  
   .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  
   .log{height:140px;overflow:auto;background:var(--logBg);color:var(--logFg);padding:10px;border-radius:10px;
        font-family:ui-monospace,monospace;font-size:12px}
+
   .muted{color:var(--muted);font-size:12px}
 </style>
 
