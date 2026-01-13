@@ -15,3 +15,7 @@ void radio_send_freq(uint32_t hz);
 // Optional: Zugriff aufs letzte RX / Status
 String radio_last_rx_line();
 uint32_t radio_last_tx_ms();
+
+void radio_send_raw(const String& core); // core ohne EOL
+void radio_query_rxfreq();
+void radio_query_presetpage();

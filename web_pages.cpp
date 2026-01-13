@@ -58,8 +58,18 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
   
   .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
   
-  .log{height:140px;overflow:auto;background:var(--logBg);color:var(--logFg);padding:10px;border-radius:10px;
-       font-family:ui-monospace,monospace;font-size:12px}
+  .log{
+    height:140px;
+    overflow:auto;
+    background:var(--logBg);
+    color:var(--logFg);
+    padding:10px;
+    border-radius:10px;
+    font-family:ui-monospace,monospace;
+    font-size:12px;
+    white-space: pre-wrap;
+    word-break: break-word
+  }
 
   .muted{color:var(--muted);font-size:12px}
 </style>
