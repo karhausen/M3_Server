@@ -5,6 +5,8 @@
 #include "app_state.h"
 #include "wifi_manager.h"
 #include "web_ui.h"
+#include "debug_console.h"
+
 
 // globaler Zustand
 AppState g_state;
@@ -18,8 +20,12 @@ void setup() {
 
   wifi_setup_with_fallback();
   webui_setup(server);
+  dbg_setup();
+
 }
 
 void loop() {
   webui_loop(server);
+  dbg_loop();
+
 }
