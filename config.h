@@ -16,3 +16,10 @@ static const bool KEEP_AP_ALSO_WHEN_STA_OK = false;
 
 // Serial
 static const uint32_t SERIAL_BAUD = 115200;
+
+// Serial2 fürs Radio
+static const int RADIO_RX_PIN = 16;     // anpassen
+static const int RADIO_TX_PIN = 17;     // anpassen
+static const uint32_t RADIO_BAUD = 19200; // anpassen
+static const uint32_t RADIO_TX_GAP_MS = 30; // Mindestabstand zwischen Commands
+static const bool RADIO_DEBUG_MIRROR = true; // send/recv zusätzlich auf Serial0 loggen

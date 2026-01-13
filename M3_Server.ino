@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "app_state.h"
+#include "radio_link.h"
 #include "wifi_manager.h"
 #include "web_ui.h"
 #include "debug_console.h"
@@ -18,6 +19,7 @@ void setup() {
   Serial.begin(SERIAL_BAUD);
   delay(200);
 
+  radio_init();
   wifi_setup_with_fallback();
   webui_setup(server);
   dbg_setup();
@@ -26,6 +28,7 @@ void setup() {
 
 void loop() {
   webui_loop(server);
+  radio_loop();
   dbg_loop();
 
 }
