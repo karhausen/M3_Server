@@ -18,11 +18,11 @@ WebServer server(80);
 void setup() {
   Serial.begin(SERIAL_BAUD);
   delay(200);
-
-  radio_init();
+  
   wifi_setup_with_fallback();
   webui_setup(server);
   dbg_setup();
+  radio_init();
 
 }
 

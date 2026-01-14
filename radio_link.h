@@ -3,6 +3,7 @@
 
 void radio_init();
 void radio_loop();                 // regelmäßig aufrufen
+
 bool radio_is_ready();             // z.B. Serial2 ok / optional Handshake
 
 // High-level API (von GUI genutzt)
@@ -18,4 +19,6 @@ uint32_t radio_last_tx_ms();
 
 void radio_send_raw(const String& core); // core ohne EOL
 void radio_query_rxfreq();
+// Queries (optional)
+void radio_query_rx_tx_freq();
 void radio_query_presetpage();

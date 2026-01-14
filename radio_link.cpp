@@ -5,50 +5,82 @@
 static HardwareSerial& R = Serial2;
 
 // --- TX Queue (ring buffer) ---
-static const int QSIZE = 16;
+static const int QSIZE = 20;
 static String q[QSIZE];
 static volatile int qHead = 0;
 static volatile int qTail = 0;
 
 static uint32_t lastTxMs = 0;
+static const uint32_t TX_GAP_MS = 25;
+
 static String rxLine;
 static String lastRx;
 static bool ready = false;
 
-static bool q_is_empty() { return qHead == qTail; }
-static bool q_is_full()  { return ((qTail + 1) % QSIZE) == qHead; }
+static String rxBuf;
+static String lastLine;
 
-static bool q_push(const String& s) {
-  if (q_is_full()) return false;
+static bool q_empty(){ return qHead == qTail; }
+static bool q_full(){ return ((qTail + 1) % QSIZE) == qHead; }
+
+static bool q_push(const String& s){
+  if(q_full()) return false;
   q[qTail] = s;
   qTail = (qTail + 1) % QSIZE;
+  if (RADIO_DEBUG_MIRROR) Serial.println("[q_push][RADIO] " + s);
   return true;
 }
 
-static bool q_pop(String& out) {
-  if (q_is_empty()) return false;
+static bool q_pop(String& out){
+  if(q_empty()) return false;
   out = q[qHead];
   qHead = (qHead + 1) % QSIZE;
+  if (RADIO_DEBUG_MIRROR) Serial.println("[q_pop][RADIO] " + out);
   return true;
 }
 
-// --- Command builder (Dummy / Platzhalter) ---
-
-static String radio_build(const String& command,
-                          const String& param = "") {
+// ---------- Protocol helpers ----------
+static String radio_build(const String& cmd, const String& param = ""){
   String s;
   s.reserve(64);
-
-  s += RADIO_HEADER;     // z.B. "M:"
-  s += command;          // z.B. "FF SRF"
-
-  if (param.length()) {
-    s += RADIO_DELIMITER; // z.B. " "
-    s += param;           // z.B. "1500000"
+  s += RADIO_HEADER;    // "\nDM:"
+  s += cmd;             // "FF SRF" oder "REMOTE SENTER2,0" ...
+  if(param.length()){
+    s += RADIO_DELIMITER; // "" laut Doku
+    s += param;           // "30100000"
   }
-
-  s += RADIO_FOOTER;     // z.B. "\r\n"
+  s += RADIO_FOOTER;    // "\r"
   return s;
+}
+
+// Für OPEN/close gibt's KEIN "DM:" Prefix, nur <LF>O<CR>
+static String radio_open_frame(){
+  return String("\n") + "O" + "\r";
+}
+
+// ---------- State machine ----------
+enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, WAIT_REMOTE_ACK, READY };
+static RadioState st = RadioState::BOOT;
+
+
+static void enqueueOrDrop(const String& s){
+  if(!q_push(s)){
+    if (RADIO_DEBUG_MIRROR) Serial.println("[enqueueOrDrop][RADIO] TX queue full, drop!");
+  } else
+  {if (RADIO_DEBUG_MIRROR) Serial.println("[enqueueOrDrop][RADIO] enqueued: " + s);}
+}
+
+static void sendNow(const String& s){
+  R.print(s);
+  lastTxMs = millis();
+  if (RADIO_DEBUG_MIRROR) Serial.print("[sendNow][RADIO TX] " + s);
+}
+
+static void radio_kick_handshake(){
+  // Boot: OPEN senden
+  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_kick_handshake][RADIO] try to open comport");
+  sendNow(radio_open_frame());
+  st = RadioState::WAIT_OPEN_ACK;
 }
 
 // --- Remote control ---
@@ -84,27 +116,95 @@ static String cmd_modeF3E()  { return radio_build("FF SMD17"); }  // FM
 // --- Send helper ---
 static void radio_enqueue(const String& cmd) {
   if (!q_push(cmd)) {
-    if (RADIO_DEBUG_MIRROR) Serial.println("[RADIO] TX queue full! command dropped.");
+    if (RADIO_DEBUG_MIRROR) Serial.println("[radio_enqueue][RADIO] TX queue full! command dropped.");
   }
 }
 
-void radio_init() {
-  // Serial2 starten
+bool radio_is_ready(){
+  return st == RadioState::READY;
+}
+
+void radio_init(){
   R.begin(RADIO_BAUD, SERIAL_8N1, RADIO_RX_PIN, RADIO_TX_PIN);
-  ready = true;
+  rxBuf.reserve(128);
+  lastLine.reserve(128);
 
-  rxLine.reserve(128);
-  lastRx.reserve(128);
+  st = RadioState::BOOT;
+  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_init][RADIO] init");
+  radio_kick_handshake();
+}
 
-  if (RADIO_DEBUG_MIRROR) {
-    Serial.println("[RADIO] Serial2 initialized.");
-    Serial.printf("[RADIO] RX pin=%d TX pin=%d baud=%lu\n", RADIO_RX_PIN, RADIO_TX_PIN, (unsigned long)RADIO_BAUD);
+
+// ---------- RX parsing ----------
+static void handleRadioLine(const String& line){
+  lastLine = line;
+  if (RADIO_DEBUG_MIRROR) Serial.println("[handleRadioLine][RADIO RX] " + lastLine);
+
+  // Doku: open-ack: "o"
+  if(st == RadioState::WAIT_OPEN_ACK){
+    if(line == "o"){
+      if (RADIO_DEBUG_MIRROR) Serial.println("[handleRadioLine][RADIO RX] response: " + line);
+      // Remote operational preset 0 aktivieren
+      sendNow(radio_build("REMOTE SENTER2,0"));
+      st = RadioState::WAIT_REMOTE_ACK;
+      return;
+    }
+  }
+  // Doku: set-ack: "ds"
+  if(st == RadioState::WAIT_REMOTE_ACK){
+    if(line == "ds"){
+      st = RadioState::READY;
+      if (RADIO_DEBUG_MIRROR) Serial.println("[handleRadioLine][RADIO] ds->READY");
+      return;
+    }
+  }
+
+  // Doku: get-response: "dg...."
+  // Beispiel: dgRF72125000;TF60000000
+  if(line.startsWith("dg")){
+    String payload = line.substring(2); // nach "dg"
+    // Tokens split by ';'
+    int start = 0;
+    while(true){
+      int sep = payload.indexOf(RADIO_CMD_SEPARATOR, start);
+      String tok = (sep < 0) ? payload.substring(start) : payload.substring(start, sep);
+      tok.trim();
+      if(tok.length()){
+        // RF<Hz> / TF<Hz>
+        if(tok.startsWith("RF")){
+          uint32_t hz = (uint32_t)tok.substring(2).toInt();
+          if(hz > 0) g_state.freq_hz = hz; // du nutzt aktuell UI für RX freq
+        }
+        // ggf. TF später nutzen
+      }
+      if(sep < 0) break;
+      start = sep + 1;
+    }
   }
 }
 
-bool radio_is_ready() {
-  return ready;
+static void radio_read_rx(){
+  while(R.available() > 0){
+    char c = (char)R.read();
+
+    if(c == '\n'){
+      // Start-of-frame LF -> ignorieren wir, wir sammeln nur bis CR
+      continue;
+    }
+    if(c == '\r'){
+      // End-of-frame
+      String line = rxBuf;
+      if (RADIO_DEBUG_MIRROR) Serial.println("[radio_read_rx][RADIO] received cr -> line: " + line);
+      rxBuf = "";
+      line.trim();
+      if(line.length()) handleRadioLine(line);
+      continue;
+    }
+
+    if(rxBuf.length() < 200) rxBuf += c;
+  }
 }
+
 
 uint32_t radio_last_tx_ms() {
   return lastTxMs;
@@ -125,108 +225,83 @@ static uint32_t parseLastNumber(const String& s) {
   return (uint32_t)s.substring(start, end + 1).toInt();
 }
 
-// --- RX parser: line-based (\n). Robust bei \r\n ---
-static void radio_read_rx() {
-  while (R.available() > 0) {
-    char c = (char)R.read();
-    if (c == '\r') continue;
+// ---------- TX flush ----------
+static void radio_flush_tx(){
+  if(st != RadioState::READY){
+  
+     return; // erst nach Handshake senden!
+  }
+  if(q_empty()) return;
 
-    if (c == '\n') {
-      if (rxLine.length() > 0) {
-        lastRx = rxLine;
+  uint32_t now = millis();
+  if(now - lastTxMs < TX_GAP_MS) return;
 
-        
-
-        // ...
-        if (lastRx.indexOf("GRF") >= 0) {
-          uint32_t hz = parseLastNumber(lastRx);
-          if (hz > 0) {
-            g_state.freq_hz = hz;
-          }
-        }
-        if (lastRx.indexOf("GPRS") >= 0) {
-          uint32_t page = parseLastNumber(lastRx);
-          // optional: g_state.preset = ...
-        }
-
-        if (RADIO_DEBUG_MIRROR) Serial.println("[RADIO RX] " + lastRx);
-
-        // TODO: hier später parse & g_state updaten (freq/mode/status)
-        rxLine = "";
-      }
-      continue;
-    }
-
-    // begrenzen, damit kein RAM weg läuft
-    if (rxLine.length() < 200) rxLine += c;
+  String out;
+  if(q_pop(out)){
+    if (RADIO_DEBUG_MIRROR) Serial.println("[radio_flush_tx][RADIO] Try to send: " + out);
+    sendNow(out);
   }
 }
 
-// --- TX sender: mit Gap, nicht-blockierend ---
-static void radio_flush_tx() {
-  if (q_is_empty()) return;
-
-  uint32_t now = millis();
-  if (now - lastTxMs < RADIO_TX_GAP_MS) return;
-
-  String cmd;
-  if (!q_pop(cmd)) return;
-
-  R.print(cmd);
-  lastTxMs = now;
-
-  if (RADIO_DEBUG_MIRROR) Serial.print("[RADIO TX] " + cmd);
-}
-
-void radio_loop() {
-  if (!ready) return;
+void radio_loop(){
   radio_read_rx();
   radio_flush_tx();
 }
 
-// --- High-level API used by web_ui ---
-void radio_send_connect() {
-  radio_enqueue(cmd_remoteOn());
+// ---------- High-level commands ----------
+void radio_send_connect(){
+  // Optional: "connect" könnte auch einfach heißen: ensure READY
+  // Wir interpretieren es als RemoteOn (operational preset 0) => ist im Handshake schon gemacht.
+  // Wenn du bei Disconnect wieder "RemoteOff" machst, dann wird Connect wieder relevant.
+  enqueueOrDrop(radio_build("REMOTE SENTER2,0"));
 }
 
-void radio_send_disconnect() {
-  radio_enqueue(cmd_remoteOff());
+void radio_send_disconnect(){
+  // Doku zeigt RemoteOff nicht als ENTER, sondern du hattest: REMOTE SENTER0
+  // (Ich lasse das so, wie du es vorhin hattest)
+  enqueueOrDrop(radio_build("REMOTE SENTER0"));
 }
 
-void radio_send_freq(uint32_t hz) {
-  radio_enqueue(cmd_setRxFreq(hz));
-}
-
-static int presetToPage(const String& preset) {
-  // "Platin" special: ich mappe es erstmal auf 0.
-  // 1..9 direkt.
-  if (preset.equalsIgnoreCase("Platin")) return 0;
+static int presetToPage(const String& preset){
+  if(preset.equalsIgnoreCase("Platin")) return 0;
   int p = preset.toInt();
-  if (p < 0) p = 0;
-  if (p > 9) p = 9;
+  if(p < 0) p = 0;
+  if(p > 9) p = 9;
   return p;
 }
 
-void radio_send_preset(const String& preset) {
-  radio_enqueue(cmd_setPresetPage(presetToPage(preset)));
+void radio_send_preset(const String& preset){
+  // laut deiner Liste: "GR SPRS" + page
+  enqueueOrDrop(radio_build("GR SPRS", String(presetToPage(preset))));
 }
 
-void radio_send_mode(const String& mode) {
-  // GUI liefert "USB"/"LSB"/"CW"
-  if (mode == "CW")  radio_enqueue(cmd_modeA1A());
-  else if (mode == "USB") radio_enqueue(cmd_modeJ3EP());
-  else if (mode == "LSB") radio_enqueue(cmd_modeJ3EM());
-  else {
-    if (RADIO_DEBUG_MIRROR) Serial.println("[RADIO] Unknown mode: " + mode);
-  }
+void radio_send_mode(const String& mode){
+  // Mapping gemäß deiner Liste
+  if(mode == "CW")       enqueueOrDrop(radio_build("FF SMD8"));
+  else if(mode == "USB") enqueueOrDrop(radio_build("FF SMD12"));
+  else if(mode == "LSB") enqueueOrDrop(radio_build("FF SMD15"));
+}
+
+void radio_send_freq(uint32_t hz){
+  // laut Doku: FF SRF30100000 (ohne Leerzeichen)
+  enqueueOrDrop(radio_build("FF SRF", String(hz)));
 }
 
 void radio_send_raw(const String& core){
-  radio_enqueue(radio_build(core));
+  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_send_raw][RADIO] " + core);
+  enqueueOrDrop(radio_build(core));
 }
+
+void radio_query_rx_tx_freq(){
+  // Multi-command inquiry: "FF GRF;TF"
+  // -> hier bauen wir den kompletten cmd-String inkl ';'
+  enqueueOrDrop(radio_build(String("FF GRF") + RADIO_CMD_SEPARATOR + "TF"));
+}
+
 void radio_query_rxfreq(){
-  radio_enqueue(cmd_getRxFreq());
+  enqueueOrDrop(cmd_getRxFreq());
 }
+
 void radio_query_presetpage(){
-  radio_enqueue(cmd_getPresetPage());
+  enqueueOrDrop(cmd_getPresetPage());
 }

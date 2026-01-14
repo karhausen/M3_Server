@@ -1,10 +1,6 @@
 #pragma once
 #include <Arduino.h>
 
-// WLAN STA
-// static const char* STA_SSID = "my_ssid";
-// static const char* STA_PASS = "my_pwd";
-
 // Fallback AP
 static const char* AP_SSID  = "RadioRemote-ESP32";
 static const char* AP_PASS  = "12345678";   // min. 8 Zeichen
@@ -29,10 +25,13 @@ static const bool RADIO_DEBUG_MIRROR = true; // send/recv zusätzlich auf Serial
 // -------------------------------------------------
 
 // Prefix vor JEDEM Radiobefehl
-static const char* RADIO_HEADER = "M:";
+static const char* RADIO_HEADER = "\nDM";
 
 // Optionales Suffix (meist CRLF)
-static const char* RADIO_FOOTER = "\r\n";
+static const char* RADIO_FOOTER = "\r";
 
 // Trenner zwischen Befehl und Parameter(n)
 static const char* RADIO_DELIMITER = " ";
+
+// Trenner zwischen mehreren Befehlen im selben Frame
+static const char  RADIO_CMD_SEPARATOR = ';';
