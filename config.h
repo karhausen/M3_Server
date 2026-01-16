@@ -25,7 +25,7 @@ static const bool RADIO_DEBUG_MIRROR = true; // send/recv zusätzlich auf Serial
 // -------------------------------------------------
 
 // Prefix vor JEDEM Radiobefehl
-static const char* RADIO_HEADER = "\nDM";
+static const char* RADIO_HEADER = "\nDM:";
 
 // Optionales Suffix (meist CRLF)
 static const char* RADIO_FOOTER = "\r";

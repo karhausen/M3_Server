@@ -114,7 +114,7 @@ static String cmd_modeJ3EM() { return radio_build("FF SMD15"); }  // LSB
 static String cmd_modeF3E()  { return radio_build("FF SMD17"); }  // FM
 
 // --- Send helper ---
-static void radio_enqueue(const String& cmd) {
+static void radio_enqueue__(const String& cmd) {
   if (!q_push(cmd)) {
     if (RADIO_DEBUG_MIRROR) Serial.println("[radio_enqueue][RADIO] TX queue full! command dropped.");
   }
@@ -152,8 +152,9 @@ static void handleRadioLine(const String& line){
   }
   // Doku: set-ack: "ds"
   if(st == RadioState::WAIT_REMOTE_ACK){
-    if(line == "ds"){
+    if(line.startsWith("ds")){ // line == "ds"
       st = RadioState::READY;
+      // todo: set Radio state -> connected
       if (RADIO_DEBUG_MIRROR) Serial.println("[handleRadioLine][RADIO] ds->READY");
       return;
     }
@@ -189,14 +190,20 @@ static void radio_read_rx(){
 
     if(c == '\n'){
       // Start-of-frame LF -> ignorieren wir, wir sammeln nur bis CR
+      Serial.println("[radio]->[cr]");
       continue;
     }
     if(c == '\r'){
       // End-of-frame
       String line = rxBuf;
-      if (RADIO_DEBUG_MIRROR) Serial.println("[radio_read_rx][RADIO] received cr -> line: " + line);
-      rxBuf = "";
       line.trim();
+      if (line.charAt(0) == '\n') {
+        line.remove(0, 1);
+      }
+
+      if (RADIO_DEBUG_MIRROR) Serial.print("[radio]->[lf] " + line);
+      rxBuf = "";
+      // line.trim();
       if(line.length()) handleRadioLine(line);
       continue;
     }
@@ -228,8 +235,8 @@ static uint32_t parseLastNumber(const String& s) {
 // ---------- TX flush ----------
 static void radio_flush_tx(){
   if(st != RadioState::READY){
-  
-     return; // erst nach Handshake senden!
+    //if (RADIO_DEBUG_MIRROR) { Serial.println("[radio_flush_tx] RadioState is not READY"); }
+    return; // erst nach Handshake senden!
   }
   if(q_empty()) return;
 
@@ -253,12 +260,14 @@ void radio_send_connect(){
   // Optional: "connect" könnte auch einfach heißen: ensure READY
   // Wir interpretieren es als RemoteOn (operational preset 0) => ist im Handshake schon gemacht.
   // Wenn du bei Disconnect wieder "RemoteOff" machst, dann wird Connect wieder relevant.
+  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_send_connect]");
   enqueueOrDrop(radio_build("REMOTE SENTER2,0"));
 }
 
 void radio_send_disconnect(){
   // Doku zeigt RemoteOff nicht als ENTER, sondern du hattest: REMOTE SENTER0
   // (Ich lasse das so, wie du es vorhin hattest)
+  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_send_disconnect]");
   enqueueOrDrop(radio_build("REMOTE SENTER0"));
 }
 
