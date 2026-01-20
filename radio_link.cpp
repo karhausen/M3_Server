@@ -54,14 +54,13 @@ static String radio_build(const String& cmd, const String& param = ""){
 }
 
 // Für OPEN/close gibt's KEIN "DM:" Prefix, nur <LF>O<CR>
-static String radio_open_frame(){
+static String radio_open_serial(){
   return String("\n") + "O" + "\r";
 }
 
 // ---------- State machine ----------
-enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, WAIT_REMOTE_ACK, READY };
+enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CONNECT_ACK, WAIT_DISCONNECT_ACK, READY };
 static RadioState st = RadioState::BOOT;
-
 
 static void enqueueOrDrop(const String& s){
   if(!q_push(s)){
@@ -73,19 +72,27 @@ static void enqueueOrDrop(const String& s){
 static void sendNow(const String& s){
   R.print(s);
   lastTxMs = millis();
-  if (RADIO_DEBUG_MIRROR) Serial.print("[sendNow][RADIO TX] " + s);
+  if (RADIO_DEBUG_MIRROR) Serial.println("[sendNow][RADIO TX] " + s);
 }
 
-static void radio_kick_handshake(){
+static void radio_start_communication(){
   // Boot: OPEN senden
-  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_kick_handshake][RADIO] try to open comport");
-  sendNow(radio_open_frame());
+  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_start_communication][RADIO] try to open comport");
+  sendNow(radio_open_serial());
   st = RadioState::WAIT_OPEN_ACK;
+  if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_OPEN_ACK");
 }
 
 // --- Remote control ---
-static String cmd_remoteOn()  { return radio_build("REMOTE SENTER2,0"); }
-static String cmd_remoteOff() { return radio_build("REMOTE SENTER0"); }
+static String cmd_remoteOn()  {
+  if (RADIO_DEBUG_MIRROR) Serial.println("[cmd_remoteOn]");
+  return radio_build("REMOTE SENTER2,0"); 
+}
+
+static String cmd_remoteOff() { 
+  if (RADIO_DEBUG_MIRROR) Serial.println("[cmd_remoteOff]");
+  return radio_build("REMOTE SENTER0"); 
+}
 
 // --- Frequenz ---
 static String cmd_getRxFreq() { return radio_build("FF GRF"); }
@@ -114,11 +121,6 @@ static String cmd_modeJ3EM() { return radio_build("FF SMD15"); }  // LSB
 static String cmd_modeF3E()  { return radio_build("FF SMD17"); }  // FM
 
 // --- Send helper ---
-static void radio_enqueue__(const String& cmd) {
-  if (!q_push(cmd)) {
-    if (RADIO_DEBUG_MIRROR) Serial.println("[radio_enqueue][RADIO] TX queue full! command dropped.");
-  }
-}
 
 bool radio_is_ready(){
   return st == RadioState::READY;
@@ -128,35 +130,50 @@ void radio_init(){
   R.begin(RADIO_BAUD, SERIAL_8N1, RADIO_RX_PIN, RADIO_TX_PIN);
   rxBuf.reserve(128);
   lastLine.reserve(128);
-
+  radio_send_disconnect();  // wenn radio schon online
+  
   st = RadioState::BOOT;
+  if (RADIO_STATE_MIRROR) Serial.println("[State]->BOOT");
   if (RADIO_DEBUG_MIRROR) Serial.println("[radio_init][RADIO] init");
-  radio_kick_handshake();
+  radio_start_communication();
 }
 
 
 // ---------- RX parsing ----------
-static void handleRadioLine(const String& line){
+static void run_state_machine(const String& line){
   lastLine = line;
-  if (RADIO_DEBUG_MIRROR) Serial.println("[handleRadioLine][RADIO RX] " + lastLine);
+  if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] " + lastLine);
 
   // Doku: open-ack: "o"
   if(st == RadioState::WAIT_OPEN_ACK){
     if(line == "o"){
-      if (RADIO_DEBUG_MIRROR) Serial.println("[handleRadioLine][RADIO RX] response: " + line);
+      if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] response: " + line);
       // Remote operational preset 0 aktivieren
-      sendNow(radio_build("REMOTE SENTER2,0"));
-      st = RadioState::WAIT_REMOTE_ACK;
+      st = RadioState::COM_PORT_IS_OPEN;
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
+      // ----- auto-connect -----
+      // sendNow(radio_build("REMOTE SENTER2,0"));
+      // st = RadioState::WAIT_CONNECT_ACK;
+      // if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_CONNECT_ACK");
       return;
     }
   }
+
   // Doku: set-ack: "ds"
-  if(st == RadioState::WAIT_REMOTE_ACK){
+  if(st == RadioState::WAIT_CONNECT_ACK){
     if(line.startsWith("ds")){ // line == "ds"
       st = RadioState::READY;
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->READY");
       // todo: set Radio state -> connected
-      if (RADIO_DEBUG_MIRROR) Serial.println("[handleRadioLine][RADIO] ds->READY");
+      g_state.radio_connected = true;
       return;
+    }
+  }
+  if(st == RadioState::WAIT_DISCONNECT_ACK){
+    if(line.startsWith("ds")){
+      st = RadioState::COM_PORT_IS_OPEN;
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
+      g_state.radio_connected = false;
     }
   }
 
@@ -190,7 +207,7 @@ static void radio_read_rx(){
 
     if(c == '\n'){
       // Start-of-frame LF -> ignorieren wir, wir sammeln nur bis CR
-      Serial.println("[radio]->[cr]");
+      // Serial.println("[radio]->[cr]");
       continue;
     }
     if(c == '\r'){
@@ -204,7 +221,7 @@ static void radio_read_rx(){
       if (RADIO_DEBUG_MIRROR) Serial.print("[radio]->[lf] " + line);
       rxBuf = "";
       // line.trim();
-      if(line.length()) handleRadioLine(line);
+      if(line.length()) run_state_machine(line);
       continue;
     }
 
@@ -235,7 +252,6 @@ static uint32_t parseLastNumber(const String& s) {
 // ---------- TX flush ----------
 static void radio_flush_tx(){
   if(st != RadioState::READY){
-    //if (RADIO_DEBUG_MIRROR) { Serial.println("[radio_flush_tx] RadioState is not READY"); }
     return; // erst nach Handshake senden!
   }
   if(q_empty()) return;
@@ -257,18 +273,17 @@ void radio_loop(){
 
 // ---------- High-level commands ----------
 void radio_send_connect(){
-  // Optional: "connect" könnte auch einfach heißen: ensure READY
-  // Wir interpretieren es als RemoteOn (operational preset 0) => ist im Handshake schon gemacht.
-  // Wenn du bei Disconnect wieder "RemoteOff" machst, dann wird Connect wieder relevant.
-  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_send_connect]");
-  enqueueOrDrop(radio_build("REMOTE SENTER2,0"));
+  // enqueueOrDrop(radio_build("REMOTE SENTER2,0"));
+  sendNow(radio_build("REMOTE SENTER2,0"));
+  st = RadioState::WAIT_CONNECT_ACK;
+  if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_CONNECT_ACK");
 }
 
 void radio_send_disconnect(){
-  // Doku zeigt RemoteOff nicht als ENTER, sondern du hattest: REMOTE SENTER0
-  // (Ich lasse das so, wie du es vorhin hattest)
-  if (RADIO_DEBUG_MIRROR) Serial.println("[radio_send_disconnect]");
-  enqueueOrDrop(radio_build("REMOTE SENTER0"));
+  // enqueueOrDrop(radio_build("REMOTE SENTER0"));
+  sendNow(radio_build("REMOTE SENTER0"));
+  st = RadioState::WAIT_DISCONNECT_ACK;
+  if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_DISCONNECT_ACK");
 }
 
 static int presetToPage(const String& preset){

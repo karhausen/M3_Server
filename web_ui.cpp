@@ -71,11 +71,11 @@ static void handleCmd(WebServer& server) {
   String cmd = extractJsonString(body, "cmd");
 
   if (cmd == "connect") {
-    g_state.radio_connected = true;
     radio_send_connect();
+    g_state.radio_connected = true;
   } else if (cmd == "disconnect") {
-    g_state.radio_connected = false;
     radio_send_disconnect();
+    g_state.radio_connected = false;
   } else if (cmd == "preset") {
     String v = extractJsonString(body, "value");
     if (v.length()) {

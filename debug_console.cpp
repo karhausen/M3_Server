@@ -20,6 +20,7 @@ static void cmd_help() {
   Serial.println("  get_mode");
   Serial.println("  get_preset");
   Serial.println("  get_radio");
+  Serial.println("  connect or disconnect");
   Serial.println("  radio_raw <command>");
   Serial.println("  radio_get_rxfreq");
   Serial.println("  radio_get_preset");
@@ -78,7 +79,12 @@ static void handleCommand(const String& lineRaw) {
     Serial.print("radio_connected=");
     Serial.println(g_state.radio_connected ? "true" : "false");
   }
-
+  else if (cmdLower == "connect") {
+    radio_send_connect();
+  }
+  else if (cmdLower == "disconnect") {
+    radio_send_disconnect();
+  }
   // ✅ NEU: Radio raw command
   else if (cmdLower == "radio_raw") {
     if (args.length() == 0) {
