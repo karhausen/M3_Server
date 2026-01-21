@@ -62,9 +62,9 @@ static String radio_open_serial(){
 // enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CONNECT_ACK, WAIT_DISCONNECT_ACK, READY };
 // static RadioState st = RadioState::BOOT;
 
-const __FlashStringHelper* getRadioStateString(RadioState state)
+const __FlashStringHelper* getRadioStateString()
 {
-  switch (state)
+  switch (radio_state)
   {
     case RadioState::BOOT:                return F("BOOT");
     case RadioState::WAIT_OPEN_ACK:       return F("WAIT_OPEN_ACK");
@@ -173,18 +173,31 @@ static void run_state_machine(const String& line){
     }
   }
 
+  if(radio_state == RadioState::COM_PORT_IS_OPEN){
+    
+  }
+  if(radio_state == RadioState::READY){
+    
+  }
   // Doku: set-ack: "ds"
   if(radio_state == RadioState::WAIT_CONNECT_ACK){
-    if(line.startsWith("ds")){ // line == "ds"
+    if(line == "ds100ENTER"){
+      if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] tried to disconnect, but we're already disconnected!");
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
+    }
+    if(line == "ds"){ // line == "ds"
       radio_state = RadioState::READY;
       if (RADIO_STATE_MIRROR) Serial.println("[State]->READY");
-      // todo: set Radio state -> connected
       g_state.radio_connected = true;
       return;
     }
   }
   if(radio_state == RadioState::WAIT_DISCONNECT_ACK){
-    if(line.startsWith("ds")){
+    if(line == "ds100ENTER"){
+      if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] tried to disconnect, but we're already disconnected!");
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
+    }
+    if(line == "ds"){
       radio_state = RadioState::COM_PORT_IS_OPEN;
       if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
       g_state.radio_connected = false;
@@ -322,7 +335,12 @@ void radio_send_mode(const String& mode){
 
 void radio_send_freq(uint32_t hz){
   // laut Doku: FF SRF30100000 (ohne Leerzeichen)
-  enqueueOrDrop(radio_build("FF SRF", String(hz)));
+  enqueueOrDrop(radio_build("FF SRF" + String(hz) + RADIO_CMD_SEPARATOR + "TF" + String(hz) ));
+}
+
+void radio_send_rx_freq(uint32_t hz){
+  // laut Doku: FF SRF30100000 (ohne Leerzeichen)
+  enqueueOrDrop(radio_build("FF SRF" + String(hz) ));
 }
 
 void radio_send_raw(const String& core){

@@ -16,7 +16,7 @@ static void cmd_help() {
   Serial.println("  help");
   Serial.println("  get_ssid");
   Serial.println("  get_wifi");
-  Serial.println("  get_frequency");
+  Serial.println("  get_frequency | set_frequency <freq in Hz>");
   Serial.println("  get_mode");
   Serial.println("  get_preset");
   Serial.println("  get_connected");
@@ -68,6 +68,15 @@ static void handleCommand(const String& lineRaw) {
     Serial.print("freq_hz=");
     Serial.println((unsigned long)g_state.freq_hz);
   }
+  else if (cmdLower == "set_frequency") {
+    Serial.print("freq_hz=");
+    Serial.println(args);
+    long hz = args.toInt();
+    if (hz >= 0) {
+      g_state.freq_hz = (uint32_t)hz;
+      radio_send_freq(g_state.freq_hz);
+    }
+  }
   else if (cmdLower == "get_mode") {
     Serial.print("mode=");
     Serial.println(g_state.mode);
@@ -83,7 +92,7 @@ static void handleCommand(const String& lineRaw) {
     Serial.print("radio_connected=");
     Serial.println(g_state.radio_connected ? "true" : "false");
     Serial.print("radio_state=");
-    Serial.println(getRadioStateString(radio_state));
+    Serial.println(getRadioStateString());
   }
   else if (cmdLower == "connect") {
     radio_send_connect();

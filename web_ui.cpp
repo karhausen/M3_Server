@@ -92,7 +92,13 @@ static void handleCmd(WebServer& server) {
     long hz = extractJsonNumber(body, "hz");
     if (hz >= 0) {
       g_state.freq_hz = (uint32_t)hz;
-      radio_send_freq(g_state.freq_hz);
+      if(g_state.freq_hz < 1500000){
+        Serial.println("Freq < 1.500 MHz");
+        radio_send_rx_freq(g_state.freq_hz);
+      } else {
+        radio_send_freq(g_state.freq_hz);
+      }
+      
     }
   }
 

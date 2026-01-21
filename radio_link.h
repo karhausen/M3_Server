@@ -4,7 +4,7 @@
 enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CONNECT_ACK, WAIT_DISCONNECT_ACK, READY };
 static RadioState radio_state = RadioState::BOOT;
 
-const __FlashStringHelper* getRadioStateString(RadioState state);
+const __FlashStringHelper* getRadioStateString();
 
 void radio_init();
 void radio_loop();                 // regelmäßig aufrufen
@@ -17,6 +17,7 @@ void radio_send_disconnect();
 void radio_send_preset(const String& preset);
 void radio_send_mode(const String& mode);
 void radio_send_freq(uint32_t hz);
+void radio_send_rx_freq(uint32_t hz);
 
 // Optional: Zugriff aufs letzte RX / Status
 String radio_last_rx_line();

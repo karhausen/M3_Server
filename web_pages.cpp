@@ -135,7 +135,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
     padding:5px 0;
     font-family:ui-monospace,monospace;
   ">
-  14 074 000 Hz
+  6 075 000 Hz
 </div>
   
 </div>
@@ -293,10 +293,10 @@ function setMode(m){
 
 
 // ------- Frequency "front panel" control -------
-const FREQ_MIN = 1500;
-const FREQ_MAX = 30000000;
+const FREQ_MIN = 100000;   // RX: 100 kHz TX: 1,5 MHz
+const FREQ_MAX = 30000000;  // 30 MHz
 
-let currentFreqHz = 14074000;
+let currentFreqHz = 6075000;
 
 const FREQ_DEBOUNCE_MS = 500;
 
