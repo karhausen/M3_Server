@@ -1,9 +1,9 @@
 #include "debug_console.h"
 
 #include "app_state.h"
-#include "wifi/wifi_manager.h"
-#include "wifi/wifi_config.h"
-#include "radio/radio_link.h"
+#include "wifi_manager.h"
+#include "wifi_config.h"
+#include "radio_link.h"
 
 static String lineBuf;
 
