@@ -4,6 +4,7 @@
 #include "wifi_manager.h"
 #include "wifi_config.h"
 #include "radio_link.h"
+#include "encoder_config.h"
 
 static String lineBuf;
 
@@ -25,6 +26,7 @@ static void cmd_help() {
   Serial.println("  radio_raw <command>");
   Serial.println("  radio_get_rxfreq");
   Serial.println("  radio_get_preset");
+  Serial.println(". get_button_state");
   Serial.println("  reboot");
   Serial.println();
 }
@@ -127,6 +129,11 @@ static void handleCommand(const String& lineRaw) {
     Serial.println("rebooting...");
     delay(200);
     ESP.restart();
+  }
+  else if (cmdLower == "get_button_state"){
+    bool now = digitalRead(ENC_BTN);
+    Serial.print("Button_state: ");
+    Serial.println(now);
   }
   else {
     Serial.print("Unknown command: ");

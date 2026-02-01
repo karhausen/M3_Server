@@ -49,7 +49,7 @@ static void IRAM_ATTR isrEnc() {
 void encoderInit() {
   pinMode(ENC_A, INPUT_PULLUP);
   pinMode(ENC_B, INPUT_PULLUP);
-  pinMode(ENC_BTN, INPUT_PULLUP);
+  pinMode(ENC_BTN, INPUT);
 
   g_lastAB = readAB();
 
