@@ -8,7 +8,7 @@
 
 #include "display.h"
 #include "encoder.h"
-
+#include "ui.h"
 #include "wifi_manager.h"
 #include "web_ui.h"
 #include "debug_console.h"
@@ -47,43 +47,10 @@ void loop() {
   radio_loop();
   dbg_loop();
 
+  // Encoder -> Events
+  EncoderEvent ev = encoderPoll();
 
-  // ---------- Encoder drehen ----------
-  int16_t delta = encoderGetAndClearDelta();
-
-  // Viele Encoder liefern 4 Ticks pro Rastung
-  static int16_t acc = 0;
-  acc += delta;
-
-  while (acc >= ENC_TICKS_PER_DETENT) {
-    acc -= ENC_TICKS_PER_DETENT;
-    Serial.println("Encoder next");
-    displayMenuNext();
-  }
-
-  while (acc <= -ENC_TICKS_PER_DETENT) {
-    acc += ENC_TICKS_PER_DETENT;
-    Serial.println("Encoder prev");
-    displayMenuPrev();
-  }
-
-  // ---------- Encoder-Taster ----------
-  EncButtonEvent ev = encoderGetButtonEvent();
-
-  if (ev == EncButtonEvent::Click) {
-    // TODO: echte Menü-Aktion
-    // z.B. RX/TX togglen, Step ändern, in Edit-Modus gehen
-    Serial.println("Encoder Click");
-  }
-  else if (ev == EncButtonEvent::LongPress) {
-    Serial.println("Encoder LongPress");
-
-    // Demo: Connection togglen
-    static bool connected = false;
-    connected = !connected;
-    displaySetConnected(connected);
-  }
-
+   ui_handleEncoder(ev);
 
   // ---------- Display ----------
   // Zeichnet nur, wenn dirty

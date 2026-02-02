@@ -2,6 +2,7 @@
 
 #include "encoder.h"
 #include "config_display.h"
+#include "display.h"
 
 // ---- Quadrature Decode (Interrupt) ----
 // Zustandsmaschine (Gray code)
@@ -49,7 +50,7 @@ static void IRAM_ATTR isrEnc() {
 void encoderInit() {
   pinMode(ENC_A, INPUT_PULLUP);
   pinMode(ENC_B, INPUT_PULLUP);
-  pinMode(ENC_BTN, INPUT);
+  pinMode(ENC_BTN, INPUT_PULLUP);
 
   g_lastAB = readAB();
 
@@ -92,5 +93,29 @@ EncButtonEvent encoderGetButtonEvent() {
 
   EncButtonEvent e = g_btnEvent;
   g_btnEvent = EncButtonEvent::None;
+  return e;
+}
+
+EncoderEvent encoderPoll() {
+  EncoderEvent e{};
+  e.steps = 0;
+  e.button = EncButtonEvent::None;
+
+  // ---- Drehung ----
+  int16_t delta = encoderGetAndClearDelta();
+  static int16_t acc = 0;
+  acc += delta;
+
+  while (acc >= ENC_TICKS_PER_DETENT) {
+    acc -= ENC_TICKS_PER_DETENT;
+    e.steps++;
+  }
+  while (acc <= -ENC_TICKS_PER_DETENT) {
+    acc += ENC_TICKS_PER_DETENT;
+    e.steps--;
+  }
+
+  // ---- Button ----
+  e.button = encoderGetButtonEvent();
   return e;
 }

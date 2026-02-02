@@ -34,7 +34,7 @@ struct UiState {
   uint32_t freq_hz = 1500;
 
   static constexpr uint8_t MENU_MAX = 4;
-  const char* menu[MENU_MAX] = {"RX", "TX", "STEP", "SET"};
+  const char* menu[MENU_MAX] = {"Freq", "Mode", "Pres", "Conn"};
   uint8_t menu_count = 4;
   uint8_t menu_index = 0;
 };
