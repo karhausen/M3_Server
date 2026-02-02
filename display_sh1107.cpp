@@ -18,23 +18,24 @@ static inline void markDirty() {
   uiDirty = true;
 }
 
-
 static const char* modeToText(RadioMode m) {
   switch (m) {
-    case RadioMode::A1A:      return "[A1A]";
-    case RadioMode::J3E_PLUS: return "[J3E+]";
-    case RadioMode::J3E_MINUS:return "[J3E-]";
-    default:                 return "[----]";
+    case RadioMode::CW:  return "[CW]";
+    case RadioMode::USB: return "[USB]";
+    case RadioMode::LSB: return "[LSB]";
+    case RadioMode::AM:  return "[AM]";
+    default:             return "[----]";
   }
 }
 
 struct UiState {
   RadioMode mode = RadioMode::UNKNOWN;
   bool connected = false;
+  bool tuneMarker = false;
   uint32_t freq_hz = 1500;
 
   static constexpr uint8_t MENU_MAX = 4;
-  const char* menu[MENU_MAX] = {"Freq", "Mode", "Pres", "Conn"};
+  const char* menu[MENU_MAX] = {"Freq", "Mode", "Preset", "Conn"};
   uint8_t menu_count = 4;
   uint8_t menu_index = 0;
 };
@@ -90,15 +91,30 @@ static int16_t textWidthPx(const char* s) {
 static void drawHeader(const UiState& s) {
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
+
+  // Mode links
   display.setCursor(0, 4);
   display.print(modeToText(s.mode));
 
+  // Connection rechts
   const char* conn = s.connected ? "[connected]" : "[disconnected]";
   int16_t w = textWidthPx(conn);
   display.setCursor(OLED_W - w, 4);
   display.print(conn);
 
   display.drawLine(0, UI_HEADER_H - 1, OLED_W - 1, UI_HEADER_H - 1, SH110X_WHITE);
+}
+
+static void drawTuneMarker(const UiState& s) {
+  if (!s.tuneMarker) return;
+
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+
+  // Links unter der Header-Linie
+  // y = UI_HEADER_H + 2 passt gut (etwas Luft zur Linie)
+  display.setCursor(0, UI_HEADER_H + 2);
+  display.print("TUNE");
 }
 
 
@@ -134,7 +150,7 @@ static void drawFrequency(const UiState& s) {
   int16_t uy = y + 8;            // optisch mittig zur Zahl
 
   // display.setCursor(ux, uy);
-  display.setCursor(OLED_W - 24, UI_HEADER_H + 12);
+  display.setCursor(OLED_W - 24, UI_HEADER_H + 2);
   display.print(unitStr);
 }
 
@@ -212,27 +228,53 @@ void displaySetFrequencyHz(uint32_t hz) {
   markDirty();
 }
 
-void displayMenuNext() {
-  if (ui.menu_count == 0) return;
-  uint8_t next = (ui.menu_index + 1) % ui.menu_count;
-  if (ui.menu_index == next) return;
-  ui.menu_index = next;
+void displaySetTuneMarker(bool on) {
+  if (ui.tuneMarker == on) return;
+  ui.tuneMarker = on;
   markDirty();
 }
 
-void displayMenuPrev() {
+void displaySetMenuLabels(const char* const* labels, uint8_t count) {
+  if (count > UiState::MENU_MAX) count = UiState::MENU_MAX;
+
+  // Nur markieren wenn sich wirklich was ändert
+  bool changed = (ui.menu_count != count);
+  ui.menu_count = count;
+
+  for (uint8_t i = 0; i < count; i++) {
+    if (ui.menu[i] != labels[i]) changed = true;
+    ui.menu[i] = labels[i];
+  }
+
+  // Falls count kleiner wurde, rest egal
+  if (ui.menu_index >= ui.menu_count) {
+    ui.menu_index = 0;
+    changed = true;
+  }
+
+  if (changed) markDirty();
+}
+
+void displaySetMenuIndex(uint8_t index) {
   if (ui.menu_count == 0) return;
-  uint8_t prev = (ui.menu_index == 0) ? (ui.menu_count - 1) : (ui.menu_index - 1);
-  if (ui.menu_index == prev) return;
-  ui.menu_index = prev;
+  index %= ui.menu_count;
+  if (ui.menu_index == index) return;
+  ui.menu_index = index;
   markDirty();
+}
+
+uint8_t displayGetMenuIndex() {
+  return ui.menu_index;
 }
 
 void displayRender() {
   display.clearDisplay();
+
   drawHeader(ui);
+  drawTuneMarker(ui);
   drawFrequency(ui);     // bzw. drawFrequency__ bei dir
   drawFooterMenu(ui);
+
   display.display();
 
   uiDirty = false;
@@ -242,10 +284,10 @@ void displayRender() {
 
 void displayTick() {
   uint32_t now = millis();
-
-  // optional: Schutz gegen zu häufiges Rendern
   if (uiDirty && (now - lastRenderMs >= UI_MIN_REFRESH_MS)) {
     displayRender();
+    uiDirty = false;
+    lastRenderMs = now;
   }
 }
 

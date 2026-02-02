@@ -2,9 +2,10 @@
 #include <Arduino.h>
 
 enum class RadioMode : uint8_t {
-  A1A,
-  J3E_PLUS,
-  J3E_MINUS,
+  CW,
+  USB,
+  LSB,
+  AM,
   UNKNOWN
 };
 
@@ -12,9 +13,20 @@ enum class RadioMode : uint8_t {
 bool displayInit();
 void displayTick();
 
+// Status im Header
 void displaySetConnected(bool connected);
 void displaySetMode(RadioMode mode);
+
+// Main Value
 void displaySetFrequencyHz(uint32_t hz);
 
-void displayMenuNext();
-void displayMenuPrev();
+// Footer-Menü
+void displaySetMenuLabels(const char* const* labels, uint8_t count);
+void displaySetMenuIndex(uint8_t index);
+uint8_t displayGetMenuIndex();
+
+// Marker
+void displaySetTuneMarker(bool on);
+
+// void displayMenuNext();
+// void displayMenuPrev();

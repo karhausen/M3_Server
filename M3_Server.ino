@@ -35,10 +35,11 @@ void setup() {
   }
 
   encoderInit();
+  ui_init();
 
-  displaySetMode(RadioMode::J3E_PLUS);
-  displaySetConnected(false);
-  displaySetFrequencyHz(14074000UL);
+  // displaySetMode(RadioMode::J3E_PLUS);
+  // displaySetConnected(false);
+  // displaySetFrequencyHz(14074000UL);
 
 }
 

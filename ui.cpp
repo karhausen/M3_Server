@@ -1,9 +1,20 @@
+#include <Arduino.h>
 #include "ui.h"
-#include "display.h"   // displayMenuNext/Prev, displaySetMode, displaySetConnected, displaySetFrequencyHz, etc.
+#include "display.h"
 
-// -------- Main Menu Items --------
-enum class MainItem : uint8_t { Freq = 0, Mode = 1, Preset = 2, Conn = 3 };
+// -------------------- Konfiguration --------------------
+static constexpr uint32_t FREQ_MIN_HZ = 1500UL;
+static constexpr uint32_t FREQ_MAX_HZ = 30000000UL;
 
+// Tuning Step (Dummy) – später aus Menü/Setting
+static uint32_t stepHz = 100UL;
+
+// -------------------- Menü-Label-Sets --------------------
+static const char* MAIN_LABELS[4]   = {"Freq", "Mode", "Preset", "Conn"};
+static const char* MODE_LABELS[4]   = {"CW", "USB", "LSB", "AM"};
+static const char* PRESET_LABELS[4] = {"P1", "P2", "P3", "P4"};
+
+// -------------------- State Machine --------------------
 enum class UiState : uint8_t {
   MainMenu,
   TuneFreq,
@@ -11,46 +22,31 @@ enum class UiState : uint8_t {
   PresetMenu
 };
 
+enum class MainItem : uint8_t {
+  Freq = 0,
+  Mode = 1,
+  Preset = 2,
+  Conn = 3
+};
+
 static UiState st = UiState::MainMenu;
 
-// Dummy Daten
+// "Model" (Dummy Daten)
 static uint32_t freqHz = 14074000UL;
 static bool connected = false;
-static uint8_t modeIndex = 0;
-static uint8_t presetIndex = 0;
+static RadioMode activeMode = RadioMode::CW; // default
 
-// Untermenüs (Dummy Labels)
-static const char* MODE_ITEMS[]   = {"CW", "USB", "LSB", "AM", "FM"};
-static const uint8_t MODE_COUNT   = sizeof(MODE_ITEMS)/sizeof(MODE_ITEMS[0]);
-
-static const char* PRESET_ITEMS[] = {"P1 7.030", "P2 14.074", "P3 28.400", "P4 145.500"};
-static const uint8_t PRESET_COUNT = sizeof(PRESET_ITEMS)/sizeof(PRESET_ITEMS[0]);
-
-// UI-Auswahlzustände
-static MainItem mainSel = MainItem::Freq;
-static uint8_t subSel = 0; // Auswahl in ModeMenu/PresetMenu
-
-// Tuning Step (Dummy)
-static uint32_t stepHz = 100UL;
-
-// Hilfsfunktionen: Display-Menütext umschalten (optional, je nach deinem Display-API)
-static void showMainMenu() {
-  // Falls du im Display die Labels dynamisch setzen willst:
-  // displaySetMenuLabels({"Freq","Mode","Preset","Conn"}, 4);
-  // Fürs Erste reicht: du hast die Labels fest im Display.
-  Serial.println("[UI] MainMenu");
+// -------------------- Helper --------------------
+static void setFooterMain() {
+  displaySetMenuLabels(MAIN_LABELS, 4);
 }
 
-static void showModeMenu() {
-  Serial.println("[UI] ModeMenu");
-  Serial.print("     Selected: ");
-  Serial.println(MODE_ITEMS[subSel]);
+static void setFooterMode() {
+  displaySetMenuLabels(MODE_LABELS, 4);
 }
 
-static void showPresetMenu() {
-  Serial.println("[UI] PresetMenu");
-  Serial.print("     Selected: ");
-  Serial.println(PRESET_ITEMS[subSel]);
+static void setFooterPreset() {
+  displaySetMenuLabels(PRESET_LABELS, 4);
 }
 
 static void enterState(UiState next) {
@@ -58,48 +54,46 @@ static void enterState(UiState next) {
 
   switch (st) {
     case UiState::MainMenu:
-      showMainMenu();
+      setFooterMain();
+      displaySetTuneMarker(false);
+      // menuIndex bleibt wie er ist (oder du setzt ihn bewusst)
+      Serial.println("[UI] State -> MainMenu");
       break;
+
     case UiState::TuneFreq:
-      Serial.println("[UI] TuneFreq (rotate changes frequency, long press back)");
+      // Footer darf ruhig Main-Menü bleiben (wie du wolltest)
+      setFooterMain();
+      displaySetTuneMarker(true);
+      Serial.println("[UI] State -> TuneFreq");
       break;
+
     case UiState::ModeMenu:
-      subSel = 0;
-      showModeMenu();
+      setFooterMode();
+      displaySetTuneMarker(false);
+      displaySetMenuIndex(0);
+      Serial.println("[UI] State -> ModeMenu");
       break;
+
     case UiState::PresetMenu:
-      subSel = 0;
-      showPresetMenu();
+      setFooterPreset();
+      displaySetTuneMarker(false);
+      displaySetMenuIndex(0);
+      Serial.println("[UI] State -> PresetMenu");
       break;
   }
 }
 
-// Mapping: mainSel <-> display menu index
-static uint8_t mainSelIndex() { return static_cast<uint8_t>(mainSel); }
-static void setMainSelFromIndex(uint8_t idx) { mainSel = static_cast<MainItem>(idx % 4); }
-
-// Wenn du im Display schon menu_index nutzt, dann sollte mainSel damit synchron sein.
-// Hier gehen wir davon aus: displayMenuNext/Prev ändern das visuelle Highlight.
-// mainSel halten wir parallel aktuell.
-static void mainNext() {
-  uint8_t idx = (mainSelIndex() + 1) % 4;
-  setMainSelFromIndex(idx);
-  displayMenuNext();
-}
-static void mainPrev() {
-  uint8_t idx = (mainSelIndex() == 0) ? 3 : (mainSelIndex() - 1);
-  setMainSelFromIndex(idx);
-  displayMenuPrev();
+// Menüindex (0..3) mit Wrap bewegen
+static void menuMove(int8_t steps) {
+  if (steps == 0) return;
+  int16_t idx = (int16_t)displayGetMenuIndex();
+  idx += steps;
+  while (idx < 0) idx += 4;
+  idx %= 4;
+  displaySetMenuIndex((uint8_t)idx);
 }
 
-static void subNext(uint8_t count) {
-  subSel = (subSel + 1) % count;
-}
-static void subPrev(uint8_t count) {
-  subSel = (subSel == 0) ? (count - 1) : (subSel - 1);
-}
-
-// Actions (noch Dummy -> Serial)
+// Dummy Action: Connection toggeln
 static void actionToggleConn() {
   connected = !connected;
   displaySetConnected(connected);
@@ -107,34 +101,53 @@ static void actionToggleConn() {
   Serial.println(connected ? "connected" : "disconnected");
 }
 
-static void actionApplyMode(uint8_t idx) {
-  Serial.print("[ACTION] Mode -> ");
-  Serial.println(MODE_ITEMS[idx]);
+// Dummy Action: Mode setzen
+static void actionSetModeFromIndex(uint8_t idx) {
+  RadioMode newMode = RadioMode::UNKNOWN;
+  const char* name = "----";
 
-  // Hier später echtes Mapping auf RadioMode
-  // z.B. displaySetMode(RadioMode::A1A) ...
+  switch (idx) {
+    case 0: newMode = RadioMode::CW;  name = "CW";  break;
+    case 1: newMode = RadioMode::USB; name = "USB"; break;
+    case 2: newMode = RadioMode::LSB; name = "LSB"; break;
+    case 3: newMode = RadioMode::AM;  name = "AM";  break;
+    default: break;
+  }
+
+  activeMode = newMode;
+  displaySetMode(newMode);
+
+  Serial.print("[ACTION] Mode -> ");
+  Serial.println(name);
 }
 
-static void actionApplyPreset(uint8_t idx) {
-  Serial.print("[ACTION] Preset -> ");
-  Serial.println(PRESET_ITEMS[idx]);
-
-  // Dummy: setze Frequenz grob je nach Preset
-  if (idx == 0) freqHz = 7030000UL;
-  if (idx == 1) freqHz = 14074000UL;
-  if (idx == 2) freqHz = 28400000UL;
-  if (idx == 3) freqHz = 145500000UL;
+// Dummy Action: Preset anwenden (hier: Frequenz setzen)
+static void actionApplyPresetFromIndex(uint8_t idx) {
+  // Beispielwerte – anpassen wie du willst
+  switch (idx) {
+    case 0: freqHz = 7030000UL;   break; // P1
+    case 1: freqHz = 14074000UL;  break; // P2
+    case 2: freqHz = 28400000UL;  break; // P3
+    case 3: freqHz = 10100000UL;  break; // P4
+    default: break;
+  }
 
   displaySetFrequencyHz(freqHz);
+
+  Serial.print("[ACTION] Preset -> P");
+  Serial.print(idx + 1);
+  Serial.print(" (Freq=");
+  Serial.print(freqHz);
+  Serial.println(" Hz)");
 }
 
-static void tuneStep(int8_t steps) {
-  // steps: +/-
-  int64_t f = (int64_t)freqHz + (int64_t)steps * (int64_t)stepHz;
+// Tune Aktion
+static void tuneBySteps(int8_t steps) {
+  if (steps == 0) return;
 
-  // Grenzen (Dummy): 1.5 kHz .. 30 MHz (du kannst hier deine echten Grenzen setzen)
-  if (f < 1500) f = 1500;
-  if (f > 30000000LL) f = 30000000LL;
+  int64_t f = (int64_t)freqHz + (int64_t)steps * (int64_t)stepHz;
+  if (f < (int64_t)FREQ_MIN_HZ) f = FREQ_MIN_HZ;
+  if (f > (int64_t)FREQ_MAX_HZ) f = FREQ_MAX_HZ;
 
   freqHz = (uint32_t)f;
   displaySetFrequencyHz(freqHz);
@@ -144,85 +157,98 @@ static void tuneStep(int8_t steps) {
   Serial.println(" Hz");
 }
 
+// -------------------- Public API --------------------
 void ui_init() {
-  enterState(UiState::MainMenu);
-  displaySetFrequencyHz(freqHz);
+  // Initiale Anzeige
+  setFooterMain();
+  displaySetMenuIndex(0);
   displaySetConnected(connected);
+  displaySetMode(activeMode);
+  displaySetFrequencyHz(freqHz);
+  displaySetTuneMarker(false);
+
+  Serial.println("[UI] init");
+  enterState(UiState::MainMenu);
 }
 
 void ui_handleEncoder(const EncoderEvent& ev) {
-  // 1) Drehung
+  // 1) Drehbewegung
   if (ev.steps != 0) {
-    int8_t s = ev.steps;
-
     switch (st) {
       case UiState::MainMenu:
-        // Menü bewegen
-        while (s > 0) { mainNext(); s--; }
-        while (s < 0) { mainPrev(); s++; }
-        break;
-
-      case UiState::TuneFreq:
-        tuneStep(s);
+        menuMove(ev.steps);
         break;
 
       case UiState::ModeMenu:
-        while (s > 0) { subNext(MODE_COUNT); s--; }
-        while (s < 0) { subPrev(MODE_COUNT); s++; }
-        showModeMenu();
+        menuMove(ev.steps);
+        Serial.print("[UI] Mode select -> ");
+        Serial.println(MODE_LABELS[displayGetMenuIndex()]);
         break;
 
       case UiState::PresetMenu:
-        while (s > 0) { subNext(PRESET_COUNT); s--; }
-        while (s < 0) { subPrev(PRESET_COUNT); s++; }
-        showPresetMenu();
+        menuMove(ev.steps);
+        Serial.print("[UI] Preset select -> ");
+        Serial.println(PRESET_LABELS[displayGetMenuIndex()]);
+        break;
+
+      case UiState::TuneFreq:
+        tuneBySteps(ev.steps);
         break;
     }
   }
 
-  // 2) Button
+  // 2) Button Events
   if (ev.button == EncButtonEvent::Click) {
     switch (st) {
-      case UiState::MainMenu:
-        // Je nach Auswahl in Zustand wechseln / Aktion
-        if (mainSel == MainItem::Freq) {
+      case UiState::MainMenu: {
+        uint8_t idx = displayGetMenuIndex();
+        MainItem sel = (MainItem)idx;
+
+        if (sel == MainItem::Freq) {
           enterState(UiState::TuneFreq);
-        } else if (mainSel == MainItem::Mode) {
+        } else if (sel == MainItem::Mode) {
           enterState(UiState::ModeMenu);
-        } else if (mainSel == MainItem::Preset) {
+        } else if (sel == MainItem::Preset) {
           enterState(UiState::PresetMenu);
-        } else if (mainSel == MainItem::Conn) {
-          actionToggleConn();          // sofort ausführen
-          enterState(UiState::MainMenu); // bleibt im Menü
+        } else if (sel == MainItem::Conn) {
+          actionToggleConn();
+          enterState(UiState::MainMenu);
         }
-        break;
+      } break;
 
       case UiState::TuneFreq:
-        // kurzer Klick im TuneFreq könnte z.B. Step wechseln (optional)
-        Serial.println("[UI] Click in TuneFreq (optional: change step)");
+        // optional: kurzer Klick könnte Step wechseln
+        Serial.println("[UI] Click in TuneFreq (optional: step change)");
         break;
 
-      case UiState::ModeMenu:
-        actionApplyMode(subSel);
-        enterState(UiState::MainMenu);  // zurück
-        break;
+      case UiState::ModeMenu: {
+        uint8_t idx = displayGetMenuIndex();
+        actionSetModeFromIndex(idx);
+        enterState(UiState::MainMenu);
+      } break;
 
-      case UiState::PresetMenu:
-        actionApplyPreset(subSel);
-        enterState(UiState::MainMenu);  // zurück
-        break;
+      case UiState::PresetMenu: {
+        uint8_t idx = displayGetMenuIndex();
+        actionApplyPresetFromIndex(idx);
+        enterState(UiState::MainMenu);
+      } break;
     }
   }
   else if (ev.button == EncButtonEvent::LongPress) {
     switch (st) {
       case UiState::TuneFreq:
+        Serial.println("[UI] LongPress -> back to MainMenu");
+        enterState(UiState::MainMenu);
+        break;
+
       case UiState::ModeMenu:
       case UiState::PresetMenu:
         Serial.println("[UI] LongPress -> back to MainMenu");
         enterState(UiState::MainMenu);
         break;
+
       case UiState::MainMenu:
-        // optional: nix oder “Schnellfunktion”
+        // optional: nix
         break;
     }
   }
