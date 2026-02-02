@@ -14,6 +14,10 @@ static Adafruit_SH1107 display(OLED_W, OLED_H, &Wire, -1);
 static bool uiDirty = true;          // beim Start einmal zeichnen
 static uint32_t lastRenderMs = 0;
 
+uint8_t tuneCursor = 2;   // 1kHz default
+bool tuneSelect = false;
+
+
 static inline void markDirty() {
   uiDirty = true;
 }
@@ -33,7 +37,9 @@ struct UiState {
   bool connected = false;
   bool tuneMarker = false;
   uint32_t freq_hz = 1500;
-
+  uint8_t tuneCursor = 2; // default KHZ
+  bool tuneSelect = false;
+  
   static constexpr uint8_t MENU_MAX = 4;
   const char* menu[MENU_MAX] = {"Freq", "Mode", "Preset", "Conn"};
   uint8_t menu_count = 4;
@@ -111,10 +117,40 @@ static void drawTuneMarker(const UiState& s) {
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
 
-  // Links unter der Header-Linie
-  // y = UI_HEADER_H + 2 passt gut (etwas Luft zur Linie)
   display.setCursor(0, UI_HEADER_H + 2);
   display.print("TUNE");
+
+  if (s.tuneSelect) {
+    display.setCursor(30, UI_HEADER_H + 2);
+    display.print("SEL");   // oder "CUR"
+  }
+}
+
+
+static void underlineRange(int16_t x, int16_t y, int16_t w) {
+  // y ist Text-Start. Unterlinie etwas unterhalb:
+  int16_t uy = y + 18; // bei TextSize(2) passt das meist gut
+  display.drawLine(x, uy, x + w - 1, uy, SH110X_WHITE);
+}
+
+void displaySetTuneCursor(uint8_t idx) {
+  if (ui.tuneCursor == idx) return;
+  ui.tuneCursor = idx;
+  markDirty();
+}
+
+void displaySetTuneSelect(bool on) {
+  if (ui.tuneSelect == on) return;
+  ui.tuneSelect = on;
+  markDirty();
+}
+
+static void formatMHz6(char* out, size_t outSize, uint32_t hz) {
+  uint32_t mhz_whole = hz / 1000000UL;
+  uint32_t rem = hz % 1000000UL; // 0..999999 entspricht .xxxxxx MHz
+  snprintf(out, outSize, "%lu.%06lu",
+           (unsigned long)mhz_whole,
+           (unsigned long)rem);
 }
 
 
@@ -152,6 +188,47 @@ static void drawFrequency(const UiState& s) {
   // display.setCursor(ux, uy);
   display.setCursor(OLED_W - 24, UI_HEADER_H + 2);
   display.print(unitStr);
+  // Cursor-Unterstreichung (nur wenn Tune aktiv)
+if (s.tuneMarker) {
+  // Wir gehen von Format "XX.XXX" aus
+  // Teile: left = vor '.', d0 d1 d2 = nach '.'
+  const char* dot = strchr(value, '.');
+  if (dot) {
+    // Breiten berechnen über getTextBounds auf Teilstrings:
+    char left[8] = {0};
+    size_t leftLen = (size_t)(dot - value);
+    if (leftLen >= sizeof(left)) leftLen = sizeof(left) - 1;
+    memcpy(left, value, leftLen);
+    left[leftLen] = 0;
+
+    // Einzelne Dezimalstellen
+    char d0[2] = { dot[1], 0 };
+    char d1[2] = { dot[2], 0 };
+    char d2[2] = { dot[3], 0 };
+
+    // Auch der Punkt selbst:
+    char point[2] = { '.', 0 };
+
+    display.setTextSize(2);
+    int16_t w_left  = textWidthPx(left);
+    int16_t w_point = textWidthPx(point);
+    int16_t w_d0    = textWidthPx(d0);
+    int16_t w_d1    = textWidthPx(d1);
+    int16_t w_d2    = textWidthPx(d2);
+
+    // Cursor: 0=MHZ (left), 1=d0, 2=d1, 3=d2
+    if (s.tuneCursor == 0) {
+      underlineRange(x, y, w_left);
+    } else if (s.tuneCursor == 1) {
+      underlineRange(x + w_left + w_point, y, w_d0);
+    } else if (s.tuneCursor == 2) {
+      underlineRange(x + w_left + w_point + w_d0, y, w_d1);
+    } else if (s.tuneCursor == 3) {
+      underlineRange(x + w_left + w_point + w_d0 + w_d1, y, w_d2);
+    }
+  }
+}
+
 }
 
 
@@ -202,7 +279,6 @@ bool displayInit() {
   if (!display.begin(OLED_ADDR, true)) { // true = reset (soft)
     return false;
   }
-  
   display.setRotation(OLED_ROTATION);  // 90° im Uhrzeigersinn
 
   display.clearDisplay();
@@ -233,6 +309,7 @@ void displaySetTuneMarker(bool on) {
   ui.tuneMarker = on;
   markDirty();
 }
+
 
 void displaySetMenuLabels(const char* const* labels, uint8_t count) {
   if (count > UiState::MENU_MAX) count = UiState::MENU_MAX;

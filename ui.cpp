@@ -29,6 +29,32 @@ enum class MainItem : uint8_t {
   Conn = 3
 };
 
+enum class TuneCursor : uint8_t {
+  MHZ,     // 1 MHz
+  KHZ100,
+  KHZ,     // 1 kHz
+  HZ100,   // 100 Hz
+  Hz
+};
+
+static bool tune_select = false;     // false=tune, true=cursor-select
+static uint8_t tune_step_idx = 2;    // default: 1 kHz (Index 2)
+
+static uint32_t stepHzFromIdx(uint8_t idx) {
+  switch (idx) {
+    case 0: return 1000000UL; // 1 MHz
+    case 1: return 100000UL;  // 100 kHz
+    case 2: return 1000UL;    // 1 kHz
+    case 3: return 100UL;     // 100 Hz
+    case 4: return 1UL;       // 1 Hz
+    default: return 1000UL;
+  }
+}
+
+
+static TuneCursor tuneCursor = TuneCursor::KHZ; // default im Tune-Mode
+
+
 static UiState st = UiState::MainMenu;
 
 // "Model" (Dummy Daten)
@@ -61,9 +87,14 @@ static void enterState(UiState next) {
       break;
 
     case UiState::TuneFreq:
-      // Footer darf ruhig Main-Menü bleiben (wie du wolltest)
       setFooterMain();
       displaySetTuneMarker(true);
+
+      tune_select = false;
+      tune_step_idx = 2;               // 1 kHz Start
+      displaySetTuneCursor(tune_step_idx);
+      displaySetTuneSelect(false);     // (neu, siehe Display-Teil unten)
+
       Serial.println("[UI] State -> TuneFreq");
       break;
 
@@ -141,21 +172,65 @@ static void actionApplyPresetFromIndex(uint8_t idx) {
   Serial.println(" Hz)");
 }
 
-// Tune Aktion
+static uint32_t stepForCursor(TuneCursor c) {
+  switch (c) {
+    case TuneCursor::MHZ:  return 1000000UL;
+    case TuneCursor::KHZ:  return 1000UL;
+    case TuneCursor::HZ100:return 100UL;
+    default:               return 1000UL;
+  }
+}
+
+static void tuneCursorNext() {
+  // Zyklus: MHZ -> KHZ -> HZ100 -> MHZ ...
+  if (tuneCursor == TuneCursor::MHZ) tuneCursor = TuneCursor::KHZ;
+  else if (tuneCursor == TuneCursor::KHZ) tuneCursor = TuneCursor::HZ100;
+  else tuneCursor = TuneCursor::MHZ;
+
+  Serial.print("[TUNE] Cursor -> ");
+  Serial.println(
+    tuneCursor == TuneCursor::MHZ ? "MHz" :
+    tuneCursor == TuneCursor::KHZ ? "kHz" : "100Hz"
+  );
+
+  // Display muss wissen, was unterstrichen werden soll:
+  displaySetTuneCursor((uint8_t)tuneCursor);
+}
+
+static void tuneCursorMove(int8_t steps) {
+  // wrap 0..4
+  int16_t idx = (int16_t)tune_step_idx + steps;
+  while (idx < 0) idx += 5;
+  idx %= 5;
+  tune_step_idx = (uint8_t)idx;
+
+  // Display Unterstreichung updaten:
+  displaySetTuneCursor(tune_step_idx);
+  Serial.print("[TUNE] Cursor step -> idx=");
+  Serial.print(tune_step_idx);
+  Serial.print(" stepHz=");
+  Serial.println(stepHzFromIdx(tune_step_idx));
+}
+
 static void tuneBySteps(int8_t steps) {
   if (steps == 0) return;
 
-  int64_t f = (int64_t)freqHz + (int64_t)steps * (int64_t)stepHz;
+  uint32_t step = stepHzFromIdx(tune_step_idx);
+  int64_t f = (int64_t)freqHz + (int64_t)steps * (int64_t)step;
+
   if (f < (int64_t)FREQ_MIN_HZ) f = FREQ_MIN_HZ;
   if (f > (int64_t)FREQ_MAX_HZ) f = FREQ_MAX_HZ;
 
   freqHz = (uint32_t)f;
   displaySetFrequencyHz(freqHz);
 
-  Serial.print("[TUNE] Freq = ");
-  Serial.print(freqHz);
-  Serial.println(" Hz");
+  Serial.print("[TUNE] step=");
+  Serial.print(step);
+  Serial.print(" Hz  Freq=");
+  Serial.println(freqHz);
 }
+
+
 
 // -------------------- Public API --------------------
 void ui_init() {
@@ -192,7 +267,10 @@ void ui_handleEncoder(const EncoderEvent& ev) {
         break;
 
       case UiState::TuneFreq:
-        tuneBySteps(ev.steps);
+        if (tune_select) 
+          tuneCursorMove(ev.steps);
+        else 
+          tuneBySteps(ev.steps);
         break;
     }
   }
@@ -205,6 +283,7 @@ void ui_handleEncoder(const EncoderEvent& ev) {
         MainItem sel = (MainItem)idx;
 
         if (sel == MainItem::Freq) {
+          tuneCursor = TuneCursor::KHZ;   // ???
           enterState(UiState::TuneFreq);
         } else if (sel == MainItem::Mode) {
           enterState(UiState::ModeMenu);
@@ -217,8 +296,12 @@ void ui_handleEncoder(const EncoderEvent& ev) {
       } break;
 
       case UiState::TuneFreq:
-        // optional: kurzer Klick könnte Step wechseln
-        Serial.println("[UI] Click in TuneFreq (optional: step change)");
+        // toggle zwischen Cursor-Select und Tunen
+        tune_select = !tune_select;
+        displaySetTuneSelect(tune_select);
+
+        Serial.print("[TUNE] ");
+        Serial.println(tune_select ? "Cursor-Select ON" : "Tune ON");
         break;
 
       case UiState::ModeMenu: {

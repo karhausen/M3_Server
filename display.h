@@ -20,6 +20,10 @@ void displaySetMode(RadioMode mode);
 // Main Value
 void displaySetFrequencyHz(uint32_t hz);
 
+void displaySetTuneCursor(uint8_t idx);   // 0..4
+void displaySetTuneSelect(bool on);       // Cursor-Select aktiv?
+
+
 // Footer-Menü
 void displaySetMenuLabels(const char* const* labels, uint8_t count);
 void displaySetMenuIndex(uint8_t index);
