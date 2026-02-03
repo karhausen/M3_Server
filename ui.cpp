@@ -52,16 +52,14 @@ static uint32_t stepHzFromIdx(uint8_t idx) {
   }
 }
 
-
 static TuneCursor tuneCursor = TuneCursor::KHZ; // default im Tune-Mode
-
 
 static UiState st = UiState::MainMenu;
 
 // "Model" (Dummy Daten)
 static uint32_t freqHz = 14074000UL;
 static bool connected = false;
-static RadioMode activeMode = RadioMode::CW; // default
+static RadioMode activeMode = global_radio_state.mode; // RadioMode::CW; // default
 
 // -------------------- Helper --------------------
 static void setFooterMain() {
@@ -141,20 +139,20 @@ static void actionToggleConn() {
 
 // Dummy Action: Mode setzen
 static void actionSetModeFromIndex(uint8_t idx) {
-  RadioMode newMode = RadioMode::UNKNOWN;
+  // RadioMode newMode = RadioMode::UNKNOWN;
   const char* name = "----";
 
   switch (idx) {
-    case 0: newMode = RadioMode::CW;  name = "CW";  break;
-    case 1: newMode = RadioMode::USB; name = "USB"; break;
-    case 2: newMode = RadioMode::LSB; name = "LSB"; break;
-    case 3: newMode = RadioMode::AM;  name = "AM";  break;
+    case 0: global_radio_state.desired_mode = RadioMode::CW;  name = "CW";  break;
+    case 1: global_radio_state.desired_mode = RadioMode::USB; name = "USB"; break;
+    case 2: global_radio_state.desired_mode = RadioMode::LSB; name = "LSB"; break;
+    case 3: global_radio_state.desired_mode = RadioMode::AM;  name = "AM";  break;
     default: break;
   }
 
-  activeMode = newMode;
-  displaySetMode(newMode);
-
+  // activeMode = newMode;
+  // displaySetMode(newMode);
+  radio_send_mode(name);
   Serial.print("[ACTION] Mode -> ");
   Serial.println(name);
 }

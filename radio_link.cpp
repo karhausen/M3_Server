@@ -205,6 +205,20 @@ static void run_state_machine(const String& line){
       displaySetConnected(global_radio_state.radio_connected);
     }
   }
+  if(radio_state == RadioState::WAIT_SET_MODE_ACK){
+    if(line == "ds"){
+      radio_state = RadioState::READY;
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->READY (ds)");
+      Serial.print("[run_state_machine][RADIO RX] Radio Mode was set to:");
+      Serial.println(global_radio_state.mode_str);
+
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->READY");
+      global_radio_state.mode = global_radio_state.desired_mode;
+      displaySetMode(global_radio_state.mode);
+      global_radio_state.mode_str = radio_mode_to_string(global_radio_state.mode);
+
+    }
+  }
 
   // Doku: get-response: "dg...."
   // Beispiel: dgRF72125000;TF60000000
@@ -331,8 +345,12 @@ void radio_send_preset(const String& preset){
 void radio_send_mode(const String& mode){
   // Mapping gemäß deiner Liste
   if(mode == "CW")       enqueueOrDrop(radio_build("FF SMD8"));
+  else if(mode == "AM") enqueueOrDrop(radio_build("FF SMD7"));    // nachschauen
+  else if(mode == "FM") enqueueOrDrop(radio_build("FF SMD3"));    // nachschauen
   else if(mode == "USB") enqueueOrDrop(radio_build("FF SMD12"));
-  else if(mode == "LSB") enqueueOrDrop(radio_build("FF SMD15"));
+  else if(mode == "LSB") enqueueOrDrop(radio_build("FF SMD15"));  // Falsch ?
+  radio_state = RadioState::WAIT_SET_MODE_ACK;
+  if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_SET_MODE_ACK");
 }
 
 void radio_send_freq(uint32_t hz){

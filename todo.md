@@ -6,6 +6,8 @@
 
     [x] connect / disconnect
     [ ] mode
+      [ ] LSB
+      [ ] USB
+      [ ] CW
     [ ] Frequency
     [ ] Preset
-    

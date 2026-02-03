@@ -1,6 +1,9 @@
 #pragma once
 #include <Arduino.h>
 
+#include <string>
+#include <cstdint>
+
 // Fallback AP
 static const char* AP_SSID  = "RadioRemote-ESP32";
 static const char* AP_PASS  = "12345678";   // min. 8 Zeichen
@@ -26,8 +29,10 @@ enum class RadioMode : uint8_t {
   USB,
   LSB,
   AM,
+  FM,
   UNKNOWN
 };
+String radio_mode_to_string(RadioMode mode);
 
 //--------------------------------------------------
 // Global Radio State
@@ -36,9 +41,12 @@ enum class RadioMode : uint8_t {
 
 struct GlobalRadioState {
   RadioMode mode = RadioMode::UNKNOWN;
+  RadioMode desired_mode = RadioMode::UNKNOWN;
+  String mode_str = "USB";
+
   uint32_t freq_hz = 1500;
   bool radio_connected = false;
-  String mode_str = "USB";
+  
   String preset = "Plain";   // "Plain" oder "1".."9"
 
   bool tuneMarker = false;  
@@ -52,6 +60,7 @@ struct GlobalRadioState {
 };
 
 extern GlobalRadioState global_radio_state;
+
 
 // -------------------------------------------------
 // Radio protocol framing

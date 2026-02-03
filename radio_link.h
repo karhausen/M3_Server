@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include "config.h"
 
-enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CONNECT_ACK, WAIT_DISCONNECT_ACK, READY };
+enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CONNECT_ACK, WAIT_DISCONNECT_ACK, READY, WAIT_SET_MODE_ACK };
 static RadioState radio_state = RadioState::BOOT;
 
 const __FlashStringHelper* getRadioStateString();
