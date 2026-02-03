@@ -267,10 +267,18 @@ void ui_handleEncoder(const EncoderEvent& ev) {
         break;
 
       case UiState::TuneFreq:
-        if (tune_select) 
-          tuneCursorMove(ev.steps);
-        else 
+        if (tune_select) {
+          // Cursor schieben
+          int16_t i = (int16_t)tune_step_idx + ev.steps;
+          while (i < 0) i += 5;
+          i %= 5;
+          tune_step_idx = (uint8_t)i;
+          displaySetTuneCursor(tune_step_idx);
+        } else {
+          // Tunen
+          uint32_t step = stepHzFromIdx(tune_step_idx);
           tuneBySteps(ev.steps);
+        }
         break;
     }
   }

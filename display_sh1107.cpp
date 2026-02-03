@@ -37,7 +37,7 @@ struct UiState {
   bool connected = false;
   bool tuneMarker = false;
   uint32_t freq_hz = 1500;
-  uint8_t tuneCursor = 2; // default KHZ
+  uint8_t tuneCursor = 2; // default 1 KHZ
   bool tuneSelect = false;
   
   static constexpr uint8_t MENU_MAX = 4;
@@ -126,12 +126,11 @@ static void drawTuneMarker(const UiState& s) {
   }
 }
 
-
 static void underlineRange(int16_t x, int16_t y, int16_t w) {
-  // y ist Text-Start. Unterlinie etwas unterhalb:
-  int16_t uy = y + 18; // bei TextSize(2) passt das meist gut
+  int16_t uy = y + 18; // bei TextSize 2 meist passend
   display.drawLine(x, uy, x + w - 1, uy, SH110X_WHITE);
 }
+
 
 void displaySetTuneCursor(uint8_t idx) {
   if (ui.tuneCursor == idx) return;
@@ -145,18 +144,35 @@ void displaySetTuneSelect(bool on) {
   markDirty();
 }
 
-static void formatMHz6(char* out, size_t outSize, uint32_t hz) {
-  uint32_t mhz_whole = hz / 1000000UL;
-  uint32_t rem = hz % 1000000UL; // 0..999999 entspricht .xxxxxx MHz
-  snprintf(out, outSize, "%lu.%06lu",
-           (unsigned long)mhz_whole,
-           (unsigned long)rem);
+static void formatKHz3(char* out, size_t outSize, uint32_t hz) {
+  uint32_t whole = hz / 1000UL; // kHz
+  uint32_t frac  = hz % 1000UL; // Hz -> .xxx kHz
+  snprintf(out, outSize, "%lu.%03lu",
+           (unsigned long)whole, (unsigned long)frac);
 }
 
+
+static void formatMHz6(char* out, size_t outSize, uint32_t hz) {
+  uint32_t whole = hz / 1000000UL;
+  uint32_t frac  = hz % 1000000UL; // .xxxxxx MHz
+  snprintf(out, outSize, "%lu.%06lu",
+           (unsigned long)whole, (unsigned long)frac);
+}
 
 static void drawFrequency(const UiState& s) {
   char value[16];
   FreqUnit unit;
+  const bool useMHz = (s.freq_hz >= 30000000UL);
+  const char* unitStr = nullptr;
+
+
+  if (useMHz) {
+    formatMHz6(value, sizeof(value), s.freq_hz);
+    unitStr = "MHz";
+  } else {
+    formatKHz3(value, sizeof(value), s.freq_hz);
+    unitStr = "kHz";
+  }
 
   formatFrequency(value, sizeof(value), unit, s.freq_hz);
 
@@ -180,54 +196,139 @@ static void drawFrequency(const UiState& s) {
   // ---------- Einheit ----------
   display.setTextSize(1);
 
-  const char* unitStr = (unit == FreqUnit::KHZ) ? "kHz" : "MHz";
-
   int16_t ux = x + valueW + 4;   // kleiner Abstand rechts
   int16_t uy = y + 8;            // optisch mittig zur Zahl
 
   // display.setCursor(ux, uy);
   display.setCursor(OLED_W - 24, UI_HEADER_H + 2);
   display.print(unitStr);
+
   // Cursor-Unterstreichung (nur wenn Tune aktiv)
-if (s.tuneMarker) {
-  // Wir gehen von Format "XX.XXX" aus
-  // Teile: left = vor '.', d0 d1 d2 = nach '.'
+  if (s.tuneMarker) {
   const char* dot = strchr(value, '.');
   if (dot) {
-    // Breiten berechnen über getTextBounds auf Teilstrings:
-    char left[8] = {0};
+    // Split links und rechts
+    char left[16] = {0};
     size_t leftLen = (size_t)(dot - value);
     if (leftLen >= sizeof(left)) leftLen = sizeof(left) - 1;
     memcpy(left, value, leftLen);
     left[leftLen] = 0;
 
-    // Einzelne Dezimalstellen
-    char d0[2] = { dot[1], 0 };
-    char d1[2] = { dot[2], 0 };
-    char d2[2] = { dot[3], 0 };
+    char point[2] = {'.', 0};
 
-    // Auch der Punkt selbst:
-    char point[2] = { '.', 0 };
+    // Rechte Seite (Nachkommastellen)
+    const char* frac = dot + 1;
+    int fracLen = (int)strlen(frac);
 
     display.setTextSize(2);
+
     int16_t w_left  = textWidthPx(left);
     int16_t w_point = textWidthPx(point);
-    int16_t w_d0    = textWidthPx(d0);
-    int16_t w_d1    = textWidthPx(d1);
-    int16_t w_d2    = textWidthPx(d2);
 
-    // Cursor: 0=MHZ (left), 1=d0, 2=d1, 3=d2
-    if (s.tuneCursor == 0) {
-      underlineRange(x, y, w_left);
-    } else if (s.tuneCursor == 1) {
-      underlineRange(x + w_left + w_point, y, w_d0);
-    } else if (s.tuneCursor == 2) {
-      underlineRange(x + w_left + w_point + w_d0, y, w_d1);
-    } else if (s.tuneCursor == 3) {
-      underlineRange(x + w_left + w_point + w_d0 + w_d1, y, w_d2);
+    // ---- kHz oder MHz? anhand Nachkommastellenlänge entscheiden ----
+    // kHz3 => fracLen==3, MHz6 => fracLen==6
+    if (fracLen == 3) {
+      // kHz: value = "<kHz>.<hhh>"
+      // idx: 0=1MHz,1=100kHz,2=1kHz,3=100Hz,4=1Hz
+
+      int L = (int)leftLen;
+
+      // idx0: MHz-Teil = left ohne letzte 3 Stellen (falls vorhanden)
+      if (s.tuneCursor == 0) {
+        int split = L - 3;
+        if (split > 0) {
+          char mhzPart[16] = {0};
+          memcpy(mhzPart, left, (size_t)split);
+          mhzPart[split] = 0;
+          int16_t w_mhz = textWidthPx(mhzPart);
+          underlineRange(x, y, w_mhz);
+        } else {
+          // unter 1 MHz: underline ganzen Integerteil
+          underlineRange(x, y, w_left);
+        }
+      }
+      // idx1: 100kHz-Ziffer (3. von rechts) -> position L-3
+      else if (s.tuneCursor == 1) {
+        int pos = L - 3;
+        if (pos >= 0 && pos < L) {
+          char pre[16] = {0};
+          memcpy(pre, left, (size_t)pos);
+          pre[pos] = 0;
+
+          char dig[2] = { left[pos], 0 };
+
+          int16_t w_pre = textWidthPx(pre);
+          int16_t w_dig = textWidthPx(dig);
+
+          underlineRange(x + w_pre, y, w_dig);
+        }
+      }
+      // idx2: 1kHz-Ziffer (letzte) -> position L-1
+      else if (s.tuneCursor == 2) {
+        int pos = L - 1;
+        if (pos >= 0 && pos < L) {
+          char pre[16] = {0};
+          memcpy(pre, left, (size_t)pos);
+          pre[pos] = 0;
+
+          char dig[2] = { left[pos], 0 };
+
+          int16_t w_pre = textWidthPx(pre);
+          int16_t w_dig = textWidthPx(dig);
+
+          underlineRange(x + w_pre, y, w_dig);
+        }
+      }
+      // idx3: 100Hz = 1. Nachkommastelle
+      else if (s.tuneCursor == 3) {
+        char d0[2] = { frac[0], 0 };
+        int16_t w_d0 = textWidthPx(d0);
+        underlineRange(x + w_left + w_point, y, w_d0);
+      }
+      // idx4: 1Hz = 3. Nachkommastelle
+      else if (s.tuneCursor == 4) {
+        char d0[2] = { frac[0], 0 };
+        char d1[2] = { frac[1], 0 };
+        char d2[2] = { frac[2], 0 };
+
+        int16_t w_d0 = textWidthPx(d0);
+        int16_t w_d1 = textWidthPx(d1);
+        int16_t w_d2 = textWidthPx(d2);
+
+        underlineRange(x + w_left + w_point + w_d0 + w_d1, y, w_d2);
+      }
+    }
+    else if (fracLen == 6) {
+      // MHz: value = "<MHz>.<ffffff>"
+      // idx: 0=1MHz,1=100kHz,2=1kHz,3=100Hz,4=1Hz
+
+      if (s.tuneCursor == 0) {
+        underlineRange(x, y, w_left);
+      } else {
+        // welcher Nachkommastellen-Index?
+        int fracIndex = -1;
+        if (s.tuneCursor == 1) fracIndex = 0; // 100kHz
+        if (s.tuneCursor == 2) fracIndex = 2; // 1kHz
+        if (s.tuneCursor == 3) fracIndex = 3; // 100Hz
+        if (s.tuneCursor == 4) fracIndex = 5; // 1Hz
+
+        if (fracIndex >= 0 && fracIndex < fracLen) {
+          // Breite der Nachkommastellen bis zur Zielstelle aufsummieren
+          int16_t w_preFrac = 0;
+          for (int i = 0; i < fracIndex; i++) {
+            char di[2] = { frac[i], 0 };
+            w_preFrac += textWidthPx(di);
+          }
+          char target[2] = { frac[fracIndex], 0 };
+          int16_t w_target = textWidthPx(target);
+
+          underlineRange(x + w_left + w_point + w_preFrac, y, w_target);
+        }
+      }
     }
   }
 }
+
 
 }
 
