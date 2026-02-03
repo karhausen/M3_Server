@@ -1,6 +1,5 @@
 #include "radio_link.h"
-#include "config.h"
-#include "app_state.h"
+#include "display.h"
 
 static HardwareSerial& R = Serial2;
 
@@ -183,13 +182,15 @@ static void run_state_machine(const String& line){
   if(radio_state == RadioState::WAIT_CONNECT_ACK){
     if(line == "ds100ENTER"){
       if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] tried to disconnect, but we're already disconnected!");
-      if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN (ds100)");
+      global_radio_state.radio_connected = true;
     }
     if(line == "ds"){ // line == "ds"
       radio_state = RadioState::READY;
-      if (RADIO_STATE_MIRROR) Serial.println("[State]->READY");
-      g_state.radio_connected = true;
-      return;
+      if (RADIO_STATE_MIRROR) Serial.println("[State]->READY (ds)");
+      global_radio_state.radio_connected = true;
+      displaySetConnected(global_radio_state.radio_connected);
+      // return;
     }
   }
   if(radio_state == RadioState::WAIT_DISCONNECT_ACK){
@@ -200,7 +201,8 @@ static void run_state_machine(const String& line){
     if(line == "ds"){
       radio_state = RadioState::COM_PORT_IS_OPEN;
       if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
-      g_state.radio_connected = false;
+      global_radio_state.radio_connected = false;
+      displaySetConnected(global_radio_state.radio_connected);
     }
   }
 
@@ -218,7 +220,7 @@ static void run_state_machine(const String& line){
         // RF<Hz> / TF<Hz>
         if(tok.startsWith("RF")){
           uint32_t hz = (uint32_t)tok.substring(2).toInt();
-          if(hz > 0) g_state.freq_hz = hz; // du nutzt aktuell UI für RX freq
+          if(hz > 0) global_radio_state.freq_hz = hz; // du nutzt aktuell UI für RX freq
         }
         // ggf. TF später nutzen
       }

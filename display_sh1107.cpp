@@ -34,9 +34,10 @@ static const char* modeToText(RadioMode m) {
 
 struct UiState {
   RadioMode mode = RadioMode::UNKNOWN;
-  bool connected = false;
-  bool tuneMarker = false;
   uint32_t freq_hz = 1500;
+  bool connected = false;
+
+  bool tuneMarker = false;  
   uint8_t tuneCursor = 2; // default 1 KHZ
   bool tuneSelect = false;
   

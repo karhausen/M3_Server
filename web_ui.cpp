@@ -1,5 +1,4 @@
 #include "web_ui.h"
-#include "app_state.h"
 #include "wifi_manager.h"
 #include "wifi_config.h"
 #include "radio_link.h"
@@ -72,31 +71,31 @@ static void handleCmd(WebServer& server) {
 
   if (cmd == "connect") {
     radio_send_connect();
-    g_state.radio_connected = true;
+    // global_radio_state.radio_connected = true;
   } else if (cmd == "disconnect") {
     radio_send_disconnect();
-    g_state.radio_connected = false;
+    // global_radio_state.radio_connected = false;
   } else if (cmd == "preset") {
     String v = extractJsonString(body, "value");
     if (v.length()) {
-      g_state.preset = v;
+      global_radio_state.preset = v;
       radio_send_preset(v);
     }
   } else if (cmd == "mode") {
     String v = extractJsonString(body, "value");
     if (v.length()) {
-      g_state.mode = v;
+      global_radio_state.mode_str = v;
       radio_send_mode(v);
     }
   } else if (cmd == "freq") {
     long hz = extractJsonNumber(body, "hz");
     if (hz >= 0) {
-      g_state.freq_hz = (uint32_t)hz;
-      if(g_state.freq_hz < 1500000){
+      global_radio_state.freq_hz = (uint32_t)hz;
+      if(global_radio_state.freq_hz < 1500000){
         Serial.println("Freq < 1.500 MHz");
-        radio_send_rx_freq(g_state.freq_hz);
+        radio_send_rx_freq(global_radio_state.freq_hz);
       } else {
-        radio_send_freq(g_state.freq_hz);
+        radio_send_freq(global_radio_state.freq_hz);
       }
       
     }
@@ -109,10 +108,10 @@ static void handleState(WebServer& server) {
   WiFiStatusInfo w = wifi_get_status();
 
   String json = "{";
-  json += "\"radio_connected\":" + String(g_state.radio_connected ? "true" : "false") + ",";
-  json += "\"freq_hz\":" + String(g_state.freq_hz) + ",";
-  json += "\"mode\":\"" + g_state.mode + "\",";
-  json += "\"preset\":\"" + g_state.preset + "\",";
+  json += "\"radio_connected\":" + String(global_radio_state.radio_connected ? "true" : "false") + ",";
+  json += "\"freq_hz\":" + String(global_radio_state.freq_hz) + ",";
+  json += "\"mode\":\"" + global_radio_state.mode_str + "\",";
+  json += "\"preset\":\"" + global_radio_state.preset + "\",";
   json += "\"wifi_mode\":\"" + w.wifi_mode + "\",";
   json += "\"sta_ip\":\"" + w.sta_ip + "\",";
   json += "\"ap_ip\":\"" + w.ap_ip + "\"";

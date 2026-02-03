@@ -1,13 +1,6 @@
 #pragma once
 #include <Arduino.h>
-
-enum class RadioMode : uint8_t {
-  CW,
-  USB,
-  LSB,
-  AM,
-  UNKNOWN
-};
+#include "config.h"
 
 
 bool displayInit();

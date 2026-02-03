@@ -8,4 +8,4 @@ struct AppState {
   String preset = "Plain";   // "Plain" oder "1".."9"
 };
 
-extern AppState g_state;
+// extern AppState g_state;

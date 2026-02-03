@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "ui.h"
 #include "display.h"
+#include "radio_link.h"
 
 // -------------------- Konfiguration --------------------
 static constexpr uint32_t FREQ_MIN_HZ = 1500UL;
@@ -125,11 +126,17 @@ static void menuMove(int8_t steps) {
 }
 
 // Dummy Action: Connection toggeln
-static void actionToggleConn() {
-  connected = !connected;
-  displaySetConnected(connected);
+static void actionToggleConn() {  
   Serial.print("[ACTION] Conn -> ");
-  Serial.println(connected ? "connected" : "disconnected");
+  if (global_radio_state.radio_connected){
+    radio_send_disconnect();
+  } else
+  {
+    radio_send_connect();
+  }
+  delay(2000);
+  // displaySetConnected(global_radio_state.radio_connected);
+  Serial.println(global_radio_state.radio_connected ? "connected" : "disconnected");
 }
 
 // Dummy Action: Mode setzen
@@ -229,8 +236,6 @@ static void tuneBySteps(int8_t steps) {
   Serial.print(" Hz  Freq=");
   Serial.println(freqHz);
 }
-
-
 
 // -------------------- Public API --------------------
 void ui_init() {

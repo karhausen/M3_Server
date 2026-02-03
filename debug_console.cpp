@@ -1,4 +1,4 @@
-#include "debug_console.h"
+#include "config.h"
 
 #include "app_state.h"
 #include "wifi_manager.h"
@@ -7,6 +7,16 @@
 #include "encoder_config.h"
 
 static String lineBuf;
+
+static const char* modeToText(RadioMode m) {
+  switch (m) {
+    case RadioMode::CW:  return "[CW]";
+    case RadioMode::USB: return "[USB]";
+    case RadioMode::LSB: return "[LSB]";
+    case RadioMode::AM:  return "[AM]";
+    default:             return "[----]";
+  }
+}
 
 static void printPrompt() {
   Serial.print("> ");
@@ -68,31 +78,31 @@ static void handleCommand(const String& lineRaw) {
   }
   else if (cmdLower == "get_frequency") {
     Serial.print("freq_hz=");
-    Serial.println((unsigned long)g_state.freq_hz);
+    Serial.println((unsigned long)global_radio_state.freq_hz);
   }
   else if (cmdLower == "set_frequency") {
     Serial.print("freq_hz=");
     Serial.println(args);
     long hz = args.toInt();
     if (hz >= 0) {
-      g_state.freq_hz = (uint32_t)hz;
-      radio_send_freq(g_state.freq_hz);
+      global_radio_state.freq_hz = (uint32_t)hz;
+      radio_send_freq(global_radio_state.freq_hz);
     }
   }
   else if (cmdLower == "get_mode") {
     Serial.print("mode=");
-    Serial.println(g_state.mode);
+    Serial.println(modeToText(global_radio_state.mode));
   }
   else if (cmdLower == "get_preset") {
     Serial.print("preset=");
-    Serial.println(g_state.preset);
+    Serial.println(global_radio_state.preset);
   }
   else if (cmdLower == "get_connected") {
     
   }
   else if (cmdLower == "get_radio_state") {
     Serial.print("radio_connected=");
-    Serial.println(g_state.radio_connected ? "true" : "false");
+    Serial.println(global_radio_state.radio_connected ? "true" : "false");
     Serial.print("radio_state=");
     Serial.println(getRadioStateString());
   }
