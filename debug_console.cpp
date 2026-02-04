@@ -8,15 +8,7 @@
 
 static String lineBuf;
 
-static const char* modeToText(RadioMode m) {
-  switch (m) {
-    case RadioMode::CW:  return "[CW]";
-    case RadioMode::USB: return "[USB]";
-    case RadioMode::LSB: return "[LSB]";
-    case RadioMode::AM:  return "[AM]";
-    default:             return "[----]";
-  }
-}
+
 
 static void printPrompt() {
   Serial.print("> ");
@@ -91,7 +83,7 @@ static void handleCommand(const String& lineRaw) {
   }
   else if (cmdLower == "get_mode") {
     Serial.print("mode=");
-    Serial.println(modeToText(global_radio_state.mode));
+    Serial.println(radio_mode_to_string(global_radio_state.mode));
   }
   else if (cmdLower == "get_preset") {
     Serial.print("preset=");
@@ -104,7 +96,7 @@ static void handleCommand(const String& lineRaw) {
     Serial.print("radio_connected=");
     Serial.println(global_radio_state.radio_connected ? "true" : "false");
     Serial.print("radio_state=");
-    Serial.println(getRadioStateString());
+    Serial.println(radio_state_to_string(global_radio_state.state));
   }
   else if (cmdLower == "connect") {
     radio_send_connect();

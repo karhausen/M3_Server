@@ -147,11 +147,10 @@ static void actionSetModeFromIndex(uint8_t idx) {
     case 1: global_radio_state.desired_mode = RadioMode::USB; name = "USB"; break;
     case 2: global_radio_state.desired_mode = RadioMode::LSB; name = "LSB"; break;
     case 3: global_radio_state.desired_mode = RadioMode::AM;  name = "AM";  break;
+    case 4: global_radio_state.desired_mode = RadioMode::FM;  name = "FM";  break;
     default: break;
   }
 
-  // activeMode = newMode;
-  // displaySetMode(newMode);
   radio_send_mode(name);
   Serial.print("[ACTION] Mode -> ");
   Serial.println(name);

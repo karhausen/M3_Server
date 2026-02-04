@@ -395,7 +395,14 @@ void displaySetConnected(bool connected) {
 }
 
 void displaySetMode(RadioMode mode) {
+  if (RADIO_DEBUG_MIRROR) {
+    Serial.print("[dislpaySetMode]->");
+    Serial.println(radio_mode_to_string(global_radio_state.mode));
+  }
   if (ui.mode == mode) return;
+  if (RADIO_DEBUG_MIRROR){
+    Serial.println("[displaySetMode][markDirty]");
+  }
   ui.mode = mode;
   markDirty();
 }

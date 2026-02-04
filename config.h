@@ -21,7 +21,8 @@ static const int RADIO_RX_PIN = 16;     // anpassen
 static const int RADIO_TX_PIN = 17;     // anpassen
 static const uint32_t RADIO_BAUD = 19200; // anpassen
 static const uint32_t RADIO_TX_GAP_MS = 30; // Mindestabstand zwischen Commands
-static const bool RADIO_DEBUG_MIRROR = false; // send/recv zusätzlich auf Serial0 loggen
+
+static const bool RADIO_DEBUG_MIRROR = true; 
 static const bool RADIO_STATE_MIRROR = true;
 
 enum class RadioMode : uint8_t {
@@ -32,7 +33,13 @@ enum class RadioMode : uint8_t {
   FM,
   UNKNOWN
 };
+
 String radio_mode_to_string(RadioMode mode);
+
+enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CONNECT_ACK, WAIT_DISCONNECT_ACK, READY, WAIT_SET_MODE_ACK };
+
+String radio_state_to_string(RadioState state);
+
 
 //--------------------------------------------------
 // Global Radio State
@@ -40,6 +47,7 @@ String radio_mode_to_string(RadioMode mode);
 
 
 struct GlobalRadioState {
+  RadioState state = RadioState::BOOT;
   RadioMode mode = RadioMode::UNKNOWN;
   RadioMode desired_mode = RadioMode::UNKNOWN;
   String mode_str = "USB";

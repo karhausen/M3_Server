@@ -118,6 +118,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
       <button id="mLSB" onclick="setMode('LSB')">LSB</button>
       <button id="mUSB" class="active" onclick="setMode('USB')">USB</button>
       <button id="mCW" onclick="setMode('CW')">CW</button>
+      <button id="mAM" onclick="setMode('AM')">AM</button>
     </div>
   </div>
 </div>
@@ -251,7 +252,7 @@ async function refreshState(){
       lastSentFreqHz = currentFreqHz; // optional, verhindert direktes Resend
     }
 
-    ['LSB','USB','CW'].forEach(x=>{
+    ['LSB','USB','CW','AM'].forEach(x=>{
       document.getElementById('m'+x).classList.toggle('active', st.mode===x);
     });
 
@@ -382,18 +383,10 @@ async function flushFreq(){
   lastSentFreqHz = toSend;
 }
 
-
 function pushFreq(){
   currentFreqHz = clamp(currentFreqHz, FREQ_MIN, FREQ_MAX);
   updateFreqUI();
   scheduleFreqSend();
-}
-
-function pushFreq__(){
-  currentFreqHz = clamp(currentFreqHz, FREQ_MIN, FREQ_MAX);
-  updateFreqUI();
-  // logLine(JSON.stringify({cmd:"freq", hz: currentFreqHz}));   // <— HARTE Debug-Zeile
-  sendCmd('freq', { hz: currentFreqHz });
 }
 
 function freqPlus(){
@@ -417,8 +410,6 @@ function stepRight(){
   stepIndex = clamp(stepIndex - 1, 0, STEPS.length - 1);
   updateFreqUI();
 }
-
-
 
 function applyDark(isDark){
   document.body.classList.toggle('dark', isDark);

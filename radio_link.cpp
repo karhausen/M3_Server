@@ -61,19 +61,6 @@ static String radio_open_serial(){
 // enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CONNECT_ACK, WAIT_DISCONNECT_ACK, READY };
 // static RadioState st = RadioState::BOOT;
 
-const __FlashStringHelper* getRadioStateString()
-{
-  switch (radio_state)
-  {
-    case RadioState::BOOT:                return F("BOOT");
-    case RadioState::WAIT_OPEN_ACK:       return F("WAIT_OPEN_ACK");
-    case RadioState::COM_PORT_IS_OPEN:    return F("COM_PORT_IS_OPEN");
-    case RadioState::WAIT_CONNECT_ACK:    return F("WAIT_CONNECT_ACK");
-    case RadioState::WAIT_DISCONNECT_ACK: return F("WAIT_DISCONNECT_ACK");
-    case RadioState::READY:               return F("READY");
-    default:                              return F("UNKNOWN");
-  }
-}
 
 static void enqueueOrDrop(const String& s){
   if(!q_push(s)){
@@ -92,7 +79,7 @@ static void radio_start_communication(){
   // Boot: OPEN senden
   if (RADIO_DEBUG_MIRROR) Serial.println("[radio_start_communication][RADIO] try to open comport");
   sendNow(radio_open_serial());
-  radio_state = RadioState::WAIT_OPEN_ACK;
+  global_radio_state.state = RadioState::WAIT_OPEN_ACK;
   if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_OPEN_ACK");
 }
 
@@ -136,7 +123,7 @@ static String cmd_modeF3E()  { return radio_build("FF SMD17"); }  // FM
 // --- Send helper ---
 
 bool radio_is_ready(){
-  return radio_state == RadioState::READY;
+  return global_radio_state.state == RadioState::READY;
 }
 
 void radio_init(){
@@ -145,7 +132,7 @@ void radio_init(){
   lastLine.reserve(128);
   radio_send_disconnect();  // wenn radio schon online
   
-  radio_state = RadioState::BOOT;
+  global_radio_state.state = RadioState::BOOT;
   if (RADIO_STATE_MIRROR) Serial.println("[State]->BOOT");
   if (RADIO_DEBUG_MIRROR) Serial.println("[radio_init][RADIO] init");
   radio_start_communication();
@@ -158,61 +145,75 @@ static void run_state_machine(const String& line){
   if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] " + lastLine);
 
   // Doku: open-ack: "o"
-  if(radio_state == RadioState::WAIT_OPEN_ACK){
+  if(global_radio_state.state == RadioState::WAIT_OPEN_ACK){
     if(line == "o"){
       if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] response: " + line);
       // Remote operational preset 0 aktivieren
-      radio_state = RadioState::COM_PORT_IS_OPEN;
+      global_radio_state.state = RadioState::COM_PORT_IS_OPEN;
       if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
       // ----- auto-connect -----
       // sendNow(radio_build("REMOTE SENTER2,0"));
-      // radio_state = RadioState::WAIT_CONNECT_ACK;
+      // global_radio_state.state = RadioState::WAIT_CONNECT_ACK;
       // if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_CONNECT_ACK");
       return;
     }
   }
 
-  if(radio_state == RadioState::COM_PORT_IS_OPEN){
+  if(global_radio_state.state == RadioState::COM_PORT_IS_OPEN){
     
   }
-  if(radio_state == RadioState::READY){
+  if(global_radio_state.state == RadioState::READY){
     
   }
-  // Doku: set-ack: "ds"
-  if(radio_state == RadioState::WAIT_CONNECT_ACK){
+
+  // ------------- connect / disconnect ------------------------
+
+  if(global_radio_state.state == RadioState::WAIT_CONNECT_ACK){
     if(line == "ds100ENTER"){
       if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] tried to disconnect, but we're already disconnected!");
       if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN (ds100)");
       global_radio_state.radio_connected = true;
     }
     if(line == "ds"){ // line == "ds"
-      radio_state = RadioState::READY;
+      global_radio_state.state = RadioState::READY;
       if (RADIO_STATE_MIRROR) Serial.println("[State]->READY (ds)");
       global_radio_state.radio_connected = true;
       displaySetConnected(global_radio_state.radio_connected);
       // return;
     }
   }
-  if(radio_state == RadioState::WAIT_DISCONNECT_ACK){
+
+  if(global_radio_state.state == RadioState::WAIT_DISCONNECT_ACK){
     if(line == "ds100ENTER"){
       if (RADIO_DEBUG_MIRROR) Serial.println("[run_state_machine][RADIO RX] tried to disconnect, but we're already disconnected!");
       if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
     }
     if(line == "ds"){
-      radio_state = RadioState::COM_PORT_IS_OPEN;
+      global_radio_state.state = RadioState::COM_PORT_IS_OPEN;
       if (RADIO_STATE_MIRROR) Serial.println("[State]->COM_PORT_IS_OPEN");
       global_radio_state.radio_connected = false;
       displaySetConnected(global_radio_state.radio_connected);
     }
   }
-  if(radio_state == RadioState::WAIT_SET_MODE_ACK){
-    if(line == "ds"){
-      radio_state = RadioState::READY;
-      if (RADIO_STATE_MIRROR) Serial.println("[State]->READY (ds)");
-      Serial.print("[run_state_machine][RADIO RX] Radio Mode was set to:");
-      Serial.println(global_radio_state.mode_str);
 
+  //--------------------------- set / change modulation mode ------------------------
+
+  if(global_radio_state.state == RadioState::WAIT_SET_MODE_ACK){
+    if(line == "ds"){
+      global_radio_state.state = RadioState::READY;
+      if (RADIO_STATE_MIRROR) {
+        Serial.print("[run_state_machine][WAIT_SET_MODE_ACK][State]->");
+        Serial.println(radio_state_to_string(global_radio_state.state));
+        Serial.print("[run_state_machine][RADIO RX] Radio Mode was set to:");
+        Serial.println(global_radio_state.mode_str);
+      }
       if (RADIO_STATE_MIRROR) Serial.println("[State]->READY");
+      if (RADIO_DEBUG_MIRROR) {
+        Serial.print("[run_state_machine][radio_mode]->actual: ");
+        Serial.println(radio_mode_to_string(global_radio_state.mode));
+        Serial.print("[run_state_machine][radio_mode]->desired: ");
+        Serial.println(radio_mode_to_string(global_radio_state.desired_mode));
+      }
       global_radio_state.mode = global_radio_state.desired_mode;
       displaySetMode(global_radio_state.mode);
       global_radio_state.mode_str = radio_mode_to_string(global_radio_state.mode);
@@ -294,7 +295,7 @@ static uint32_t parseLastNumber(const String& s) {
 
 // ---------- TX flush ----------
 static void radio_flush_tx(){
-  if(radio_state != RadioState::READY){
+  if(global_radio_state.state != RadioState::READY){
     return; // erst nach Handshake senden!
   }
   if(q_empty()) return;
@@ -318,14 +319,14 @@ void radio_loop(){
 void radio_send_connect(){
   // enqueueOrDrop(radio_build("REMOTE SENTER2,0"));
   sendNow(radio_build("REMOTE SENTER2,0"));
-  radio_state = RadioState::WAIT_CONNECT_ACK;
+  global_radio_state.state = RadioState::WAIT_CONNECT_ACK;
   if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_CONNECT_ACK");
 }
 
 void radio_send_disconnect(){
   // enqueueOrDrop(radio_build("REMOTE SENTER0"));
   sendNow(radio_build("REMOTE SENTER0"));
-  radio_state = RadioState::WAIT_DISCONNECT_ACK;
+  global_radio_state.state = RadioState::WAIT_DISCONNECT_ACK;
   if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_DISCONNECT_ACK");
 }
 
@@ -344,13 +345,36 @@ void radio_send_preset(const String& preset){
 
 void radio_send_mode(const String& mode){
   // Mapping gemäß deiner Liste
-  if(mode == "CW")       enqueueOrDrop(radio_build("FF SMD8"));
-  else if(mode == "AM") enqueueOrDrop(radio_build("FF SMD7"));    // nachschauen
-  else if(mode == "FM") enqueueOrDrop(radio_build("FF SMD3"));    // nachschauen
-  else if(mode == "USB") enqueueOrDrop(radio_build("FF SMD12"));
-  else if(mode == "LSB") enqueueOrDrop(radio_build("FF SMD15"));  // Falsch ?
-  radio_state = RadioState::WAIT_SET_MODE_ACK;
-  if (RADIO_STATE_MIRROR) Serial.println("[State]->WAIT_SET_MODE_ACK");
+  if(mode == "CW") {
+    sendNow(radio_build("FF SMD8" ));
+    global_radio_state.desired_mode = RadioMode::CW;
+  }       
+  else if(mode == "AM")  {
+    sendNow(radio_build("FF SMD9" ));
+    global_radio_state.desired_mode = RadioMode::AM;
+  }    
+  else if(mode == "FM")  {
+    sendNow(radio_build("FF SMD17"));
+    global_radio_state.desired_mode = RadioMode::FM;
+  }
+  else if(mode == "USB") {
+    sendNow(radio_build("FF SMD12"));
+    global_radio_state.desired_mode = RadioMode::USB;
+  }
+  else if(mode == "LSB") {
+    sendNow(radio_build("FF SMD14"));
+    global_radio_state.desired_mode = RadioMode::LSB;
+  }
+  else {
+    Serial.print("[radio_send_mode]unknown radio_mode: ");
+    Serial.println(mode);
+  }
+  delay(500);
+  global_radio_state.state = RadioState::WAIT_SET_MODE_ACK;
+  if (RADIO_STATE_MIRROR) {
+    Serial.print("[radio_send_mode][State]->");
+    Serial.println(radio_state_to_string(global_radio_state.state));
+  }
 }
 
 void radio_send_freq(uint32_t hz){
