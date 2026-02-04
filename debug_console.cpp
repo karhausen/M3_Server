@@ -82,8 +82,10 @@ static void handleCommand(const String& lineRaw) {
     }
   }
   else if (cmdLower == "get_mode") {
-    Serial.print("mode=");
+    Serial.print("GlobalRadioState.mode = ");
     Serial.println(radio_mode_to_string(global_radio_state.mode));
+    Serial.print("Radio.mode = ");
+    radio_query_mode();
   }
   else if (cmdLower == "get_preset") {
     Serial.print("preset=");

@@ -40,11 +40,15 @@ enum class RadioState : uint8_t { BOOT, WAIT_OPEN_ACK, COM_PORT_IS_OPEN, WAIT_CO
 
 String radio_state_to_string(RadioState state);
 
+//--------------------------------------------------
+
+static constexpr uint32_t FREQ_MIN_HZ =     1500UL; //  1,5 kHz
+static constexpr uint32_t FREQ_MAX_HZ = 30000000UL; // 30 MHz
+static constexpr uint32_t FREQ_TX_MIN_HZ = 1500000; // 1,5 MHz
 
 //--------------------------------------------------
 // Global Radio State
 //--------------------------------------------------
-
 
 struct GlobalRadioState {
   RadioState state = RadioState::BOOT;

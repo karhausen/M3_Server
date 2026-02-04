@@ -105,6 +105,11 @@ static String cmd_setTxFreq(uint32_t hz) {
   return radio_build("FF STF", String(hz));
 }
 
+// --- Mode ---
+static String cmd_getMode() {
+  return radio_build("FF GMD");
+}
+
 // --- Presets ---
 static String cmd_getPresetPage() {
   return radio_build("GR GPRS");
@@ -138,6 +143,9 @@ void radio_init(){
   radio_start_communication();
 }
 
+void get_radio_settings(){
+
+}
 
 // ---------- RX parsing ----------
 static void run_state_machine(const String& line){
@@ -179,6 +187,8 @@ static void run_state_machine(const String& line){
       if (RADIO_STATE_MIRROR) Serial.println("[State]->READY (ds)");
       global_radio_state.radio_connected = true;
       displaySetConnected(global_radio_state.radio_connected);
+
+
       // return;
     }
   }
@@ -220,7 +230,14 @@ static void run_state_machine(const String& line){
 
     }
   }
-
+  if(line.startsWith("dgMD")){
+    String payload = line.substring(4);
+    if (RADIO_DEBUG_MIRROR) {
+      Serial.print("[run_state_machine][dgMD]: ");
+      Serial.println(payload);
+    }
+    
+  }
   // Doku: get-response: "dg...."
   // Beispiel: dgRF72125000;TF60000000
   if(line.startsWith("dg")){
@@ -378,15 +395,16 @@ void radio_send_mode(const String& mode){
 }
 
 void radio_send_freq(uint32_t hz){
-  // laut Doku: FF SRF30100000 (ohne Leerzeichen)
-  enqueueOrDrop(radio_build("FF SRF" + String(hz) + RADIO_CMD_SEPARATOR + "TF" + String(hz) ));
-
+  if(hz < FREQ_TX_MIN_HZ){
+    Serial.println("Freq < 1.500 MHz");
+    radio_send_rx_freq(global_radio_state.freq_hz);
+  } else {
+    enqueueOrDrop(radio_build("FF SRF" + String(hz) + RADIO_CMD_SEPARATOR + "TF" + String(hz) ));
+  }
   global_radio_state.freq_hz = hz;
-  
 }
 
 void radio_send_rx_freq(uint32_t hz){
-  // laut Doku: FF SRF30100000 (ohne Leerzeichen)
   enqueueOrDrop(radio_build("FF SRF" + String(hz) ));
 }
 
@@ -403,6 +421,10 @@ void radio_query_rx_tx_freq(){
 
 void radio_query_rxfreq(){
   enqueueOrDrop(cmd_getRxFreq());
+}
+
+void radio_query_mode(){
+  enqueueOrDrop(cmd_getMode());
 }
 
 void radio_query_presetpage(){

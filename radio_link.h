@@ -28,4 +28,5 @@ void radio_send_raw(const String& core); // core ohne EOL
 void radio_query_rxfreq();
 // Queries (optional)
 void radio_query_rx_tx_freq();
+void radio_query_mode();
 void radio_query_presetpage();

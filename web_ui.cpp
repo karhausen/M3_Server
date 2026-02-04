@@ -90,14 +90,14 @@ static void handleCmd(WebServer& server) {
   } else if (cmd == "freq") {
     long hz = extractJsonNumber(body, "hz");
     if (hz >= 0) {
-      global_radio_state.freq_hz = (uint32_t)hz;
-      if(global_radio_state.freq_hz < 1500000){
-        Serial.println("Freq < 1.500 MHz");
-        radio_send_rx_freq(global_radio_state.freq_hz);
-      } else {
-        radio_send_freq(global_radio_state.freq_hz);
-      }
-      
+      // global_radio_state.freq_hz = (uint32_t)hz;
+      // if(global_radio_state.freq_hz < 1500000){
+      //   Serial.println("Freq < 1.500 MHz");
+      //   radio_send_rx_freq(global_radio_state.freq_hz);
+      // } else {
+      //   radio_send_freq(global_radio_state.freq_hz);
+      // }
+      radio_send_freq(global_radio_state.freq_hz);
     }
   }
 

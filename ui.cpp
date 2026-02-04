@@ -4,8 +4,8 @@
 #include "radio_link.h"
 
 // -------------------- Konfiguration --------------------
-static constexpr uint32_t FREQ_MIN_HZ = 1500UL;
-static constexpr uint32_t FREQ_MAX_HZ = 30000000UL;
+// static constexpr uint32_t FREQ_MIN_HZ =     1500UL; //  1,5 kHz
+// static constexpr uint32_t FREQ_MAX_HZ = 30000000UL; // 30 MHz
 
 // Tuning Step (Dummy) – später aus Menü/Setting
 static uint32_t stepHz = 100UL;
@@ -229,6 +229,7 @@ static void tuneBySteps(int8_t steps) {
   Serial.println(freqHz);
   // todo: radio_send_freq verzögern, damit radio nicht überfahren wird.
   radio_send_freq(freqHz);
+  
 }
 
 // -------------------- Public API --------------------
