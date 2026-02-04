@@ -380,6 +380,9 @@ void radio_send_mode(const String& mode){
 void radio_send_freq(uint32_t hz){
   // laut Doku: FF SRF30100000 (ohne Leerzeichen)
   enqueueOrDrop(radio_build("FF SRF" + String(hz) + RADIO_CMD_SEPARATOR + "TF" + String(hz) ));
+
+  global_radio_state.freq_hz = hz;
+  
 }
 
 void radio_send_rx_freq(uint32_t hz){

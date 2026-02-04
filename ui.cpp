@@ -81,19 +81,16 @@ static void enterState(UiState next) {
     case UiState::MainMenu:
       setFooterMain();
       displaySetTuneMarker(false);
-      // menuIndex bleibt wie er ist (oder du setzt ihn bewusst)
       Serial.println("[UI] State -> MainMenu");
       break;
 
     case UiState::TuneFreq:
       setFooterMain();
       displaySetTuneMarker(true);
-
       tune_select = false;
       tune_step_idx = 2;               // 1 kHz Start
       displaySetTuneCursor(tune_step_idx);
-      displaySetTuneSelect(false);     // (neu, siehe Display-Teil unten)
-
+      displaySetTuneSelect(false);     
       Serial.println("[UI] State -> TuneFreq");
       break;
 
@@ -141,7 +138,6 @@ static void actionToggleConn() {
 static void actionSetModeFromIndex(uint8_t idx) {
   // RadioMode newMode = RadioMode::UNKNOWN;
   const char* name = "----";
-
   switch (idx) {
     case 0: global_radio_state.desired_mode = RadioMode::CW;  name = "CW";  break;
     case 1: global_radio_state.desired_mode = RadioMode::USB; name = "USB"; break;
@@ -150,7 +146,6 @@ static void actionSetModeFromIndex(uint8_t idx) {
     case 4: global_radio_state.desired_mode = RadioMode::FM;  name = "FM";  break;
     default: break;
   }
-
   radio_send_mode(name);
   Serial.print("[ACTION] Mode -> ");
   Serial.println(name);
@@ -232,6 +227,8 @@ static void tuneBySteps(int8_t steps) {
   Serial.print(step);
   Serial.print(" Hz  Freq=");
   Serial.println(freqHz);
+  // todo: radio_send_freq verzögern, damit radio nicht überfahren wird.
+  radio_send_freq(freqHz);
 }
 
 // -------------------- Public API --------------------
